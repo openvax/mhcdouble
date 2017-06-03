@@ -10,6 +10,72 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import sys
+from argparse import ArgumentParser
+
+import pandas as pd
+
+parser = ArgumentParser(description="Predict peptide-MHC Class II binding")
+
+parser.add_argument("model", help="Name of trained model (run mhc2-list to see available options)")
+
+parser.add_argument("--allele", nargs="*", help="Class II MHC allele(s), alpha chain can be omitted for HLA-DR")
+parser.add_argument("--peptide", nargs="*", help="Peptide sequence")
+parser.add_argument("--peptides-file", help="Text file with a peptide on every line (excluding comment lines)")
+parser.add_argument("--output")
+
+from .. import model_by_allele_name
+
+def parse_args(args_list=None):
+    if args_list is None:
+        args_list = sys.argv[1:]
+    return parser.parse_args(args_list)
+
+def filter_peptides(peptides, to_upper=True):
+    """
+    Strip and uppercase peptides (if necessary) and drop any
+    empty sequences.
+    """
+    new_peptides = []
+    for peptide in peptides:
+        peptide = peptide.strip()
+        if to_upper:
+            peptide = peptide.upper()
+        if not peptide:
+            continue
+        else:
+            new_peptides.append(peptide)
+    return new_peptides
+
+
+def load_peptides_list(path, to_upper=True):
+    peptides = []
+    with open(path) as f:
+        for line in f:
+            if f.startswith("#"):
+                continue
+            line = line.strip()
+            if not line:
+                continue
+            peptides.append(line.split()[0])
+    return filter_peptides(peptides, to_upper=to_upper)
 
 def main(args_list=None):
-    pass
+    args = parse_args(args_list)
+    alleles = args.allele
+    if not alleles:
+        raise ValueError("Expected at least one HLA Class II allele")
+    peptides = []
+    peptides.extend(filter_peptides(args.peptide))
+    for path in args.peptides_file:
+        peptides.extend(load_peptides_list(path))
+    partial_result_dataframes = []
+    for allele in alleles:
+        model = model_by_allele_name(allele)
+        partial_result_dataframes.append(
+            model.predict_dataframe(peptides))
+    result_df = pd.concat(partial_result_dataframes)
+    print(result_df)
+    if args.output:
+        result_df.to_csv(args.output, index=False)
+
