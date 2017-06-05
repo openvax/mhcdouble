@@ -1,11 +1,68 @@
+from pepnet import Predictor
+import numpy as np
+import ujson
+
 class Ensemble(object):
     """
     Ensemble of allele-specific Class II MHC binding predictors
     which can be serialized, trained, and used to make predictions.
     """
-    pass
+    def __init__(self, models, model_weights=None):
+        self.models = models
+        if model_weights is None:
+            model_weights = np.ones(len(self.models), dtype="float32")
+        if len(model_weights) != len(self.models):
+            raise ValueError(
+                "Mismatch between %d models and %d weights" % (
+                    len(self.models), len(self.model_weights)))
+        self.model_weights = model_weights
 
+    def predict(self, peptides):
+        total_pred = np.zeros(len(peptides), dtype="float64")
+        total_weight = 0.0
+        for model, weight in zip(self.models, self.model_weights):
+            pred = model.predict(peptides)
+            total_pred += pred
+            total_weight += weight
+        return total_pred / total_weight
 
+    def to_dict(self):
+        result = {"model_weights": self.model_weights}
+        model_dicts = []
+        for model in self.models:
+            model_dicts.append(model.to_dict())
+        result["models"] = model_dicts
+        return result
+
+    @classmethod
+    def from_dict(cls, d):
+        model_dicts = d["models"]
+        model_weights = d.get("model_weights")
+        models = [
+            Predictor.from_dict(d)
+            for d in model_dicts
+        ]
+        return cls(models=models, model_weights=model_weights)
+
+    def to_json(self):
+        return ujson.dumps(self.to_dict())
+
+    def to_json_file(self, filename):
+        with open(filename, "w") as f:
+            f.write(self.to_json())
+
+    @classmethod
+    def from_json_file(cls, filename):
+        with open(filename, "r") as f:
+            json_string = f.read().strip()
+        if len(json_string) == 0:
+            raise ValueError("JSON file '%s' was empty" % (filename,))
+        d = ujson.loads(json_string)
+        if len(d) == 0:
+            raise ValueError("Dictionary representation of ensemble empty")
+        return cls.from_dict(d)
+
+"""
 def make_predictor(
         conv_filter_sizes,
         conv_dropout=0.25,
@@ -156,10 +213,8 @@ def train_predictors(
         n_cv_splits=N_CV_SPLITS,
         max_epochs=MAX_EPOCHS,
         csv_log_filename="allele_specific_log.csv"):
-    """
-    Generate which returns tuples with these fields:
-        (allele, model, hyperparameters, weight)
-    """
+    # Generate which returns tuples with these fields:
+    #     (allele, model, hyperparameters, weight)
     hyperparameter_keys = sorted(all_hyperparameters[0].keys())
     with open(csv_log_filename, "w") as f:
         csv_writer = csv.DictWriter(f, fieldnames=[
@@ -234,3 +289,4 @@ if __name__ == "__main__":
         for allele, sum_pred in allele_to_predictions.items():
             extra_peptides_df[allele] = sum_pred / allele_to_sum_weights[allele]
         extra_peptides_df.to_csv("ensemble_predictions.csv")
+"""

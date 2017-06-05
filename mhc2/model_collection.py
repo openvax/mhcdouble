@@ -45,7 +45,7 @@ class ModelCollection(object):
                 raw_allele_names.append(filename)
         return [parse_mhc_alleles(allele) for allele in raw_allele_names]
 
-    def allele_path(self, allele, create_if_missing=False):
+    def allele_dir(self, allele, create_if_missing=False):
         path = self.path(create_if_missing=create_if_missing)
         path = os.path.join(path, allele)
         if create_if_missing:
@@ -54,5 +54,10 @@ class ModelCollection(object):
 
     def add_model(self, allele, model):
         self._cache[allele] = model
-        path = self.allele_path(allele)
+        json_string = model.to_json()
+        directory = self.allele_dir(allele)
+        allele_json_name = allele + ".json"
+        path = os.path.join(directory, allele_json_name)
+        with open(path, "w") as f:
+            w.write(json_string)
 
