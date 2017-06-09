@@ -6,30 +6,24 @@ import os
 import os.path
 from shutil import rmtree
 
-from appdirs import user_data_dir
-
-BASE_PATH = user_data_dir(
-    appname="mhc2",
-    appauthor="hammerlab",
-    version="1")
+from .mhc_names import normalize_mhc_name
 
 def _ensure_dir(path):
     if not os.path.exists(path):
         os.makedirs(path)
 
 class ModelCollection(object):
-    def __init__(self, name):
-        self.name = name
+    def __init__(self, path):
+        self._path = path
         self._cache = {}
 
     def clear_cache(self):
         self.cache.clear()
 
     def path(self, create_if_missing=False):
-        path = os.path.join(BASE_PATH, self.name)
         if create_if_missing:
-            _ensure_dir(path)
-        return path
+            _ensure_dir(self._path)
+        return self._path
 
     def exists(self):
         return os.path.exists(self.path(create_if_missing=False))
@@ -38,26 +32,35 @@ class ModelCollection(object):
         if self.exists():
             rmtree(self.path())
 
-    def alleles(self):
-        raw_allele_names = []
-        for filename in os.listdir(self.path(create_if_missing=True)):
-            if not filename.startswith("_") or filename.startswith("."):
-                raw_allele_names.append(filename)
-        return [parse_mhc_alleles(allele) for allele in raw_allele_names]
+    def _allele_to_filename(self, allele):
+        basename = allele.replace("*", "_")
+        return basename + ".json"
 
-    def allele_dir(self, allele, create_if_missing=False):
-        path = self.path(create_if_missing=create_if_missing)
-        path = os.path.join(path, allele)
-        if create_if_missing:
-            _ensure_dir(path)
-        return path
+    def _filename_to_allele(self, filename):
+            basename = os.path.basename(filename)
+            without_extension = os.path.splitext(basename)[0]
+            return normalize_mhc_name(without_extension)
+
+    def alleles(self):
+        allele_names = []
+        for filename in os.listdir(self.path(create_if_missing=True)):
+            if not filename.endswith(".json"):
+                continue
+            if filename.startswith("_") or filename.startswith("."):
+                continue
+            allele = self._filename_to_allele(filename)
+            allele_names.append(allele)
+        return allele_names
+
+    def _allele_path(self, allele):
+        filename = self._allele_to_filename(allele)
+        return os.path.join(
+            self.path(create_if_missing=True), filename)
 
     def add_model(self, allele, model):
+        allele = parse_mhc_allele(allele)
         self._cache[allele] = model
+        path = self._allele_path(allele)
         json_string = model.to_json()
-        directory = self.allele_dir(allele)
-        allele_json_name = allele + ".json"
-        path = os.path.join(directory, allele_json_name)
         with open(path, "w") as f:
             w.write(json_string)
-

@@ -10,26 +10,36 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import sys
 from argparse import ArgumentParser
 
 import pandas as pd
 
+from .common import parse_args
+
 parser = ArgumentParser(description="Predict peptide-MHC Class II binding")
 
-parser.add_argument("model", help="Name of trained model (run mhc2-list to see available options)")
+parser.add_argument(
+    "--model-dir",
+    help="Directory containing trained MHC II model",
+    required=True)
 
-parser.add_argument("--allele", nargs="*", help="Class II MHC allele(s), alpha chain can be omitted for HLA-DR")
+parser.add_argument(
+    "--allele",
+    nargs="+",
+    help=(
+        "Class II MHC allele(s), alpha chain can be omitted for HLA-DR. "
+        "You can run `mhc2-alleles model-dir/` to see which alleles are "
+        "available for a particular model."))
+
 parser.add_argument("--peptide", nargs="*", help="Peptide sequence")
-parser.add_argument("--peptides-file", help="Text file with a peptide on every line (excluding comment lines)")
-parser.add_argument("--output")
 
-from .. import model_by_allele_name
+parser.add_argument(
+    "--peptides-file",
+ help="Text file with a peptide on every line (excluding comment lines)")
 
-def parse_args(args_list=None):
-    if args_list is None:
-        args_list = sys.argv[1:]
-    return parser.parse_args(args_list)
+parser.add_argument(
+    "--output",
+    help="Name of CSV file which will contain results.")
 
 def filter_peptides(peptides, to_upper=True):
     """
@@ -61,7 +71,7 @@ def load_peptides_list(path, to_upper=True):
     return filter_peptides(peptides, to_upper=to_upper)
 
 def main(args_list=None):
-    args = parse_args(args_list)
+    args = parse_args(parser, args_list)
     alleles = args.allele
     if not alleles:
         raise ValueError("Expected at least one HLA Class II allele")

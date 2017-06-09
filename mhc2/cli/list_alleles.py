@@ -15,9 +15,23 @@ from argparse import ArgumentParser
 import pandas as pd
 
 from .common import parse_args
+from ..model_collection import ModelCollection
 
-parser = ArgumentParser(description="Extend a dataset with decoys")
 
+parser = ArgumentParser(
+    description="List available alleles for an MHC II model")
+
+parser.add_argument(
+    "path",
+    help="Directory containing MHC II model")
 
 def main(args_list=None):
     args = parse_args(parser, args_list)
+    mc = ModelCollection(path=args.path)
+    alleles = mc.alleles()
+    if len(alleles) == 0:
+        print("0 alleles in %s" % args.path)
+    else:
+        print("%d alleles in %s" % (len(alleles), args.path))
+        for allele in alleles:
+            print("-- %s" % allele)

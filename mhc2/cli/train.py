@@ -10,6 +10,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+parser = ArgumentParser(description="Predict peptide-MHC Class II binding")
+
+parser.add_argument(
+    "--model-dir",
+    help="Directory to which will contain trained MHC II models",
+    required=True)
+
+parser.add_argument(
+    "--data-csv")
+
 
 def main(args_list=None):
     pass

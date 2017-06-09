@@ -10,14 +10,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from argparse import ArgumentParser
+import sys
 
-import pandas as pd
-
-from .common import parse_args
-
-parser = ArgumentParser(description="Extend a dataset with decoys")
-
-
-def main(args_list=None):
-    args = parse_args(parser, args_list)
+def parse_args(parser, args_list):
+    if args_list is None:
+        args_list = sys.argv[1:]
+    if parse_args is None:
+        raise ValueError("Argument parser cannot be None")
+    return parser.parse_args(args_list)

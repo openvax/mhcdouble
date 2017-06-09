@@ -76,6 +76,7 @@ if __name__ == '__main__':
                 'mhc2-train=mhc2.cli.train:main',
                 'mhc2-group-nested-seqs=mhc2.cli.group_nested_seqs:main',
                 'mhc2-generate-decoys=mhc2.cli.generate_decoys:main',
+                'mhc2-list-alleles=mhc2.cli.list_alleles:main',
             ]
         }
     )
