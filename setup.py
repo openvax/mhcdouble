@@ -67,6 +67,7 @@ if __name__ == '__main__':
         install_requires=[
             'numpy',
             'pandas',
+            'ujson',
         ],
         long_description=readme,
         packages=find_packages(exclude="test"),

@@ -1,7 +1,19 @@
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import math
 
 import numpy as np
-
+import pandas as pd
 
 class Dataset(object):
     """
@@ -147,4 +159,70 @@ class Dataset(object):
             labels=labels,
             weights=weights,
             group_ids=group_ids)
+
+
+    def to_dataframe(self):
+        columns = OrderedDict([
+            ("peptide", self.peptides),
+            ("allele", self.alleles),
+            ("label", self.labels),
+            ("weight", self.weights),
+            ("group_id", self.group_ids)
+        ])
+        return pd.DataFrame(columns)
+
+    @classmethod
+    def from_dataframe(cls, df):
+        col_names = set(df.columns)
+        peptides = None
+        alleles = None
+        labels = None
+        weights = None
+        group_ids = None
+
+        for name in ["peptide", "peptides", "sequence", "sequences", "seq", "seqs"]:
+            if name in col_names:
+                peptides = list(df[name])
+                break
+        if peptides is None:
+            raise ValueError("Missing peptides column, available: %s" % (col_names,))
+
+        for name in ["mhc", "allele", "alleles"]:
+            if name in col_names:
+                alleles = list(df[name])
+                break
+        if alleles is None:
+            raise ValueError("Missing alleles column, available: %s" % (col_names,))
+
+        for name in ["label", "labels", "hit", "hits"]:
+            if name in col_names:
+                labels = np.array(df[name])
+                break
+
+        if labels is None:
+            raise ValueError("Missing labels column, available: %s" % (col_names,))
+
+        for name in ["weight", "weights", "sample_weight", "sample_weights"]:
+            if name in col_names:
+                weights = np.array(df[name])
+                break
+
+        for name in ["group_id", "group_ids", "group", "groups"]:
+            if name in col_names:
+                group_ids = np.array(df[name])
+                break
+
+        return Dataset(
+            alleles=alleles,
+            peptides=peptides,
+            labels=labels,
+            weights=weights,
+            group_ids=group_ids)
+
+    def to_csv(self, filename):
+        self.to_dataframe().to_csv(filename, index=False)
+
+    @classmethod
+    def from_csv(cls, filename):
+        return cls.from_dataframe(pd.read_csv(filename))
 

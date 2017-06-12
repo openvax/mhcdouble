@@ -17,7 +17,6 @@ import pandas as pd
 from .common import parse_args
 from ..model_collection import ModelCollection
 
-
 parser = ArgumentParser(
     description="List available alleles for an MHC II model")
 

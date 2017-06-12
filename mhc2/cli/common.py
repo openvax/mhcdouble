@@ -18,3 +18,12 @@ def parse_args(parser, args_list):
     if parse_args is None:
         raise ValueError("Argument parser cannot be None")
     return parser.parse_args(args_list)
+
+def parse_bool(s):
+    lower = s.lower()
+    if lower in {"1", "true", "y", "yes"}:
+        return True
+    elif lower in {"0", "false", "n", "no"}:
+        return False
+    else:
+        raise ValueError("Expected boolean value but got '%s'" % (s,))

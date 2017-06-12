@@ -9,7 +9,8 @@ def test_new_model_collection_is_empty():
 def test_add_empty_ensemble():
     mc = ModelCollection("_test")
     e = Ensemble(models=[])
-    mc.add_model("DRB1*01:01", e)
-    mc.clear_cache()
-    e2 = mc.get_model("DRB1*01:01")
+    mc.add_ensemble("DRB1*01:01", e)
+    e2 = mc.get_ensemble("DRB1*01:01")
     eq_(e, e2)
+    mc.delete()
+
