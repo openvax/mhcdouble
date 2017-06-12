@@ -36,12 +36,12 @@ DENSE_ACTIVATION = "relu"
 parser = ArgumentParser(description="Predict peptide-MHC Class II binding")
 
 parser.add_argument(
-    "--output-dir",
+    "--model-dir",
     required=True,
     help="Directory to save trained MHC II models")
 
 parser.add_argument(
-    "dataset",
+    "--dataset",
     help=("""CSV with the following columns:
     - allele : string
     - peptide : string
@@ -143,7 +143,7 @@ def main(args_list=None):
         max_peptide_length = max(len(p) for p in dataset.peptides)
 
     model_collection = train_model_collection(
-        path=args.output_dir,
+        path=args.model_dir,
         dataset=dataset,
         make_predictor_fn=lambda: make_predictor_from_args(max_peptide_length, args),
         n_cv_splits=args.cross_validation_splits,

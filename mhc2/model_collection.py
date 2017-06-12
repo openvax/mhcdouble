@@ -20,7 +20,7 @@ class ModelCollection(object):
     """
     def __init__(self, path):
         self._path = path
-        self._allele_to_ensemble_dict = None
+        self._allele_to_ensemble_dict = {}
 
     def path(self, create_if_missing=False):
         if create_if_missing:
@@ -34,8 +34,8 @@ class ModelCollection(object):
         if self.exists():
             rmtree(self.path())
 
-    def clear_cache(self):
-        self._allele_to_ensemble_dict = None
+    def clear(self):
+        self._allele_to_ensemble_dict.clear()
 
     def allele_to_path_dict(self):
         result = {}
@@ -50,15 +50,30 @@ class ModelCollection(object):
         return result
 
     def alleles(self):
-       return set(self.allele_to_path_dict().keys())
+       return sorted(set(self.allele_to_path_dict().keys()))
 
     def alleles_to_ensembles(self):
-        if self._allele_to_ensemble_dict is None:
-            self._allele_to_ensemble_dict = {}
-            for allele, path in self.allele_to_path_dict().items():
+        for allele, path in self.allele_to_path_dict().items():
+            if allele not in self._allele_to_ensemble_dict:
                 ensemble = Ensemble.from_json_file(path)
                 self._allele_to_ensemble_dict[allele] = ensemble
         return self._allele_to_ensemble_dict
+
+    def __getitem__(self, allele):
+        allele_to_path_dict = self.allele_to_path_dict()
+        allele = normalize_mhc_name(allele)
+        if allele not in allele_to_path_dict:
+            print("Available alleles:")
+            for other_allele in self.alleles():
+                print("-- %s" % other_allele)
+            raise KeyError("Allele not found: %s" % allele)
+        elif allele in self._allele_to_ensemble_dict:
+            return self._allele_to_ensemble_dict[allele]
+        else:
+            path = allele_to_path_dict[allele]
+            ensemble = Ensemble.from_json_file(path)
+            self._allele_to_ensemble_dict[allele] = ensemble
+
 
     def _allele_to_filename(self, allele):
         basename = allele.replace("*", "_")

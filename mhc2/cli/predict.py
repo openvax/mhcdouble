@@ -15,6 +15,7 @@ from argparse import ArgumentParser
 import pandas as pd
 
 from .common import parse_args
+from ..model_collection import ModelCollection
 
 parser = ArgumentParser(description="Predict peptide-MHC Class II binding")
 
@@ -35,7 +36,15 @@ parser.add_argument("--peptide", nargs="*", help="Peptide sequence")
 
 parser.add_argument(
     "--peptides-file",
- help="Text file with a peptide on every line (excluding comment lines)")
+    help="Text file with a peptide on every line (excluding comment lines)",
+    nargs="*",
+    default=[])
+
+parser.add_argument(
+    "--input-csv",
+    help=("""CSV with the following columns:
+    - allele : string
+    - peptide : string"""))
 
 parser.add_argument(
     "--output",
@@ -72,6 +81,7 @@ def load_peptides_list(path, to_upper=True):
 
 def main(args_list=None):
     args = parse_args(parser, args_list)
+    print("Args: %s" % (args,))
     alleles = args.allele
     if not alleles:
         raise ValueError("Expected at least one HLA Class II allele")
@@ -79,9 +89,12 @@ def main(args_list=None):
     peptides.extend(filter_peptides(args.peptide))
     for path in args.peptides_file:
         peptides.extend(load_peptides_list(path))
+
+    model_collection = ModelCollection(args.model_dir)
+
     partial_result_dataframes = []
     for allele in alleles:
-        model = model_by_allele_name(allele)
+        model = model_collection[allele]
         partial_result_dataframes.append(
             model.predict_dataframe(peptides))
     result_df = pd.concat(partial_result_dataframes)

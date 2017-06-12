@@ -10,8 +10,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from collections import defaultdict
 from sklearn.model_selection import GroupKFold
 from sklearn.metrics import roc_auc_score
+
+from .model_collection import ModelCollection
+from .ensemble import Ensemble
 
 def train_predictors_for_allele(
         dataset,
@@ -29,6 +33,7 @@ def train_predictors_for_allele(
             X=dataset.peptides,
             y=dataset.labels,
             groups=dataset.group_ids)):
+        print("Epoch %d/%d" % (outer_fold_idx + 1, n_cv_splits))
         train_dataset = dataset[train_idx]
         n_train = len(train_dataset)
         n_train_pos = train_dataset.labels.sum()
@@ -74,7 +79,7 @@ def train_predictors_for_allele(
                 epoch + 1,
                 test_auc,
                 " (*)" if epochs_since_improvement == 0 else ""))
-            if epochs_since_improvement >= PATIENCE:
+            if epochs_since_improvement >= patience:
                 break
         if last_best_weights is None:
             logging.warn("Best weights = None!")
@@ -116,6 +121,7 @@ def train_allele_to_ensemble_dict(
         f = None
 
     for allele, allele_dataset in dataset.groupby_allele():
+        print("=== %s ===" % allele)
         for (model, weight) in train_predictors_for_allele(
                     dataset=allele_dataset,
                     make_predictor_fn=make_predictor_fn,
