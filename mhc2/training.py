@@ -25,6 +25,7 @@ def train_predictors_for_allele(
         patience,
         batch_size=64,
         csv_writer=None):
+    dataset = dataset.shuffle()
     outer_cv = GroupKFold(n_splits=n_cv_splits)
     inner_cv = GroupKFold(n_splits=2)
     allele = list(set(dataset.alleles))[0]
@@ -33,7 +34,7 @@ def train_predictors_for_allele(
             X=dataset.peptides,
             y=dataset.labels,
             groups=dataset.group_ids)):
-        print("Epoch %d/%d" % (outer_fold_idx + 1, n_cv_splits))
+        print("Training subset %d/%d" % (outer_fold_idx + 1, n_cv_splits))
         train_dataset = dataset[train_idx]
         n_train = len(train_dataset)
         n_train_pos = train_dataset.labels.sum()
