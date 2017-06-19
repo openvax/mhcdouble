@@ -36,9 +36,7 @@ parser.add_argument("--peptide", nargs="*", help="Peptide sequence")
 
 parser.add_argument(
     "--peptides-file",
-    help="Text file with a peptide on every line (excluding comment lines)",
-    nargs="*",
-    default=[])
+    help="Text file with a peptide on every line (excluding comment lines)")
 
 parser.add_argument(
     "--input-csv",
@@ -85,18 +83,28 @@ def main(args_list=None):
     alleles = args.allele
     if not alleles:
         raise ValueError("Expected at least one HLA Class II allele")
+
     peptides = []
-    peptides.extend(filter_peptides(args.peptide))
-    for path in args.peptides_file:
-        peptides.extend(load_peptides_list(path))
-
+    if args.peptide:
+        peptides.extend(filter_peptides(args.peptide))
+    if args.peptides_file:
+        peptides.extend(load_peptides_list(args.peptides_file))
     model_collection = ModelCollection(args.model_dir)
-
     partial_result_dataframes = []
-    for allele in alleles:
-        model = model_collection[allele]
-        partial_result_dataframes.append(
-            model.predict_dataframe(peptides))
+
+    if len(peptides) > 0:
+        for allele in alleles:
+            model = model_collection[allele]
+            partial_result_dataframes.append(
+                model.predict_dataframe(peptides))
+    if args.input_csv:
+        input_df = pd.read_csv(args.input_csv)
+        for allele, group in input_df.groupby("allele"):
+            input_peptides = list(group["peptide"])
+            partial_result_dataframes.append(
+                model.predict_dataframe(input_peptides))
+    if len(partial_result_dataframes) == 0:
+        raise ValueError("No peptides given!")
     result_df = pd.concat(partial_result_dataframes)
     print(result_df)
     if args.output:
