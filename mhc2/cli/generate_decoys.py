@@ -15,9 +15,25 @@ from argparse import ArgumentParser
 import pandas as pd
 
 from .common import parse_args
+from ..dataset import Dataset
 
 parser = ArgumentParser(description="Extend a dataset with decoys")
+parser.add_argument(
+    "--input-csv",
+    help=("""Name of input CSV containing mass spec hits, expected to have the following columns:
+    - "allele" : string (can also be "mhc")
+    - "peptide" : string (can also be "seq")"""),
+    required=True)
 
+parser.add_argument(
+    "--output-csv",
+    help=("""Name of output CSV file which will have the following columns:
+    - "allele" : string
+    - "peptide" : string
+    - "label" : bool"""),
+    required=True)
 
 def main(args_list=None):
     args = parse_args(parser, args_list)
+    dataset = Dataset.from_csv(args.input_csv)
+    dataset.to_csv(args.output_csv)

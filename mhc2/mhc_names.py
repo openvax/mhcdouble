@@ -119,3 +119,21 @@ def normalize_mhc_name(name):
 
 test_normalized = normalize_mhc_name("HLA-DRA*0101/DRB1*0801")
 assert test_normalized == "HLA-DRA10101-DRB10801", test_normalized
+
+def normalize_mhc_names(alleles):
+    """
+    Normalizes list of allele names
+    """
+    # first group alleles to minimize the number of calls to the
+    # normalization function
+    allele_to_indices = defaultdict(list)
+    for i, allele in enumerate(alleles):
+        allele_to_indices[allele].append(i)
+    results = [None] * len(alleles)
+    for allele, indices in allele_to_indices.items():
+        allele = normalize_mhc_name(allele)
+        for i in indices:
+            results[i] = allele
+    return results
+
+

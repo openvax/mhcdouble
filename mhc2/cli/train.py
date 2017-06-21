@@ -43,13 +43,13 @@ parser.add_argument(
 parser.add_argument(
     "--dataset",
     help=("""CSV with the following columns:
-    - allele : string
-    - peptide : string
-    - hit : binary
+    - "allele" : string (can also be "mhc")
+    - "peptide" : string (can also be "seq")
+    - "label" : binary (can also be "hit")
         1 = peptide is a mass-spec hit
         0 = peptide is a decoy
-    - weight : float (optional)
-    - group_id : int (optional)
+    - "weight" : float (optional)
+    - "group_id" : int (optional)
 
     Can be generated from just hits using `mhc2-generate-decoys`
     and `mhc2-group-nested-seqs`."""))

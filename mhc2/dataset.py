@@ -11,9 +11,12 @@
 # limitations under the License.
 
 import math
+from collections import OrderedDict
 
 import numpy as np
 import pandas as pd
+
+from .mhc_names import normalize_mhc_names
 
 class Dataset(object):
     """
@@ -66,7 +69,7 @@ class Dataset(object):
                     n_peptides,
                     len(labels)))
 
-        self.alleles = alleles
+        self.alleles = normalize_mhc_names(alleles)
         self.peptides = peptides
         self.labels = np.array(labels)
         self.weights = np.array(weights)
@@ -200,7 +203,7 @@ class Dataset(object):
                 break
 
         if labels is None:
-            raise ValueError("Missing labels column, available: %s" % (col_names,))
+            labels = np.array([True] * len(peptides))
 
         for name in ["weight", "weights", "sample_weight", "sample_weights"]:
             if name in col_names:
@@ -226,3 +229,26 @@ class Dataset(object):
     def from_csv(cls, filename):
         return cls.from_dataframe(pd.read_csv(filename))
 
+    @classmethod
+    def from_dict(cls, allele_to_peptides_dict, label=True):
+        """
+        Create Dataset from allele->peptide dictionary of hits
+        """
+        alleles = []
+        peptides = []
+        for allele, allele_peptides in allele_to_peptides_dict.items():
+            alleles.extend([allele] * len(allele_peptides))
+            peptides.extend(allele_peptides)
+        labels = [label] * len(peptides)
+        return cls(alleles=alleles, peptides=peptides, labels=labels)
+
+    @classmethod
+    def from_excel(cls, filename, allow_X_in_peptides=False, label=True):
+        df = pd.read_excel(filename)
+        allele_to_peptides_dict = {}
+        for allele in df.columns:
+            allele_to_peptides_dict[allele] = [
+                s.upper() for s in df[allele]
+                if isinstance(s, str) and len(s) > 0 and ("X" not in s)
+            ]
+        return cls.from_dict(allele_to_peptides_dict, label=label)
