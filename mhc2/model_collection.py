@@ -78,6 +78,8 @@ class ModelCollection(object):
             print("Available alleles:")
             for other_allele in self.alleles():
                 print("-- %s" % other_allele)
+            else:
+                print("  none")
             raise KeyError("Allele not found: %s" % allele)
         elif allele not in self._allele_to_ensemble_dict:
             path = allele_to_path_dict[allele]
@@ -108,12 +110,17 @@ class ModelCollection(object):
                 model_weights=[weight])
 
     def add_ensemble(self, allele, ensemble):
+        allele = normalize_mhc_name(allele)
+        self._save_ensemble(allele, ensemble)
         self.alleles_to_ensembles()[allele] = ensemble
+
+    def _save_ensemble(self, allele, ensemble):
+        path = self._allele_to_path(allele, create_if_missing=True)
+        print("-- Writing %s" % path)
+        json_string = ensemble.to_json()
+        with open(path, "w") as f:
+            f.write(json_string)
 
     def to_disk(self):
         for allele, ensemble in self.alleles_to_ensembles().items():
-            path = self._allele_to_path(allele, create_if_missing=True)
-            print("-- Writing %s" % path)
-            json_string = ensemble.to_json()
-            with open(path, "w") as f:
-                f.write(json_string)
+            self._save_ensemble(allele, ensemble)

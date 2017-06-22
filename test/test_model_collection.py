@@ -10,7 +10,7 @@ def test_add_empty_ensemble():
     mc = ModelCollection("_test")
     e = Ensemble(models=[])
     mc.add_ensemble("DRB1*01:01", e)
-    e2 = mc.get_ensemble("DRB1*01:01")
+    e2 = mc["DRB1*01:01"]
     eq_(e, e2)
     mc.delete()
 

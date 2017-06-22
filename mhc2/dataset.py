@@ -13,16 +13,21 @@
 import math
 from collections import OrderedDict
 
+from six import string_types
 import numpy as np
 import pandas as pd
 
-from .mhc_names import normalize_mhc_names
+from .mhc_names import normalize_mhc_name, normalize_mhc_names
 
 class Dataset(object):
     """
-    Training data for single allele of Class II MHC
+    Training data for one or more alleles of Class II MHC peptide presentation
     """
-    def __init__(self, alleles, peptides, labels=None, weights=None, group_ids=None):
+    def _validate_and_normalize(
+            self, alleles, peptides, labels, weights, group_ids):
+        if isinstance(peptides, string_types):
+            peptides = [peptides]
+
         n_peptides = len(peptides)
 
         if n_peptides != len(alleles):
@@ -30,6 +35,11 @@ class Dataset(object):
                 "Length mismatch between peptides (%d) and alleles (%d)" % (
                     n_peptides,
                     len(alleles)))
+
+        if isinstance(alleles, string_types):
+            alleles = [normalize_mhc_name(alleles)] * n_peptides
+        else:
+            alleles = normalize_mhc_names(alleles)
 
         if labels is None:
             # if labels are not given then assume that the dataset is
@@ -42,6 +52,8 @@ class Dataset(object):
                 "Length mismatch between peptides (%d) and labels (%d)" % (
                     n_peptides,
                     len(labels)))
+        else:
+            labels = np.array(labels)
 
         if group_ids is None:
             # if sequence groups aren't given then put every
@@ -54,6 +66,8 @@ class Dataset(object):
                 "Length mismatch between peptides (%d) and groups (%d)" % (
                     n_peptides,
                     len(group_ids)))
+        else:
+            group_ids = np.array(group_ids)
 
         if weights is None:
             # if weights aren't given then every element has the same
@@ -68,15 +82,40 @@ class Dataset(object):
                 "Length mismatch between peptides (%d) and weights (%d)" % (
                     n_peptides,
                     len(labels)))
+        else:
+            weights = np.array(weights)
 
-        self.alleles = normalize_mhc_names(alleles)
+        return alleles, peptides, labels, weights, group_ids
+
+    def __init__(self, alleles, peptides, labels=None, weights=None, group_ids=None):
+        alleles, peptides, labels, weights, group_ids = \
+            self._validate_and_normalize(
+                alleles=alleles,
+                peptides=peptides,
+                labels=labels,
+                weights=weights,
+                group_ids=group_ids)
+        self.alleles = alleles
         self.peptides = peptides
-        self.labels = np.array(labels)
-        self.weights = np.array(weights)
-        self.group_ids = np.array(group_ids)
+        self.labels = labels
+        self.weights = weights
+        self.group_ids = group_ids
 
     def __len__(self):
         return len(self.peptides)
+
+    def __eq__(self, other):
+        if self.__class__ != other.__class__:
+            return False
+        if len(self) != len(other):
+            return False
+        other_dict = other.to_dict()
+        for (column_name, values) in self.to_dict().items():
+            other_values = other_dict[column_name]
+            for (x, y) in zip(values, other_values):
+                if x != y:
+                    return False
+        return True
 
     def __getitem__(self, indices):
         if isinstance(indices, slice):
@@ -164,15 +203,17 @@ class Dataset(object):
             group_ids=group_ids)
 
 
-    def to_dataframe(self):
-        columns = OrderedDict([
+    def to_dict(self):
+        return OrderedDict([
             ("peptide", self.peptides),
             ("allele", self.alleles),
             ("label", self.labels),
             ("weight", self.weights),
             ("group_id", self.group_ids)
         ])
-        return pd.DataFrame(columns)
+
+    def to_dataframe(self):
+        return pd.DataFrame(self.to_dict())
 
     @classmethod
     def from_dataframe(cls, df):
@@ -230,7 +271,7 @@ class Dataset(object):
         return cls.from_dataframe(pd.read_csv(filename))
 
     @classmethod
-    def from_dict(cls, allele_to_peptides_dict, label=True):
+    def from_allele_dict(cls, allele_to_peptides_dict, label=True):
         """
         Create Dataset from allele->peptide dictionary of hits
         """
@@ -243,7 +284,7 @@ class Dataset(object):
         return cls(alleles=alleles, peptides=peptides, labels=labels)
 
     @classmethod
-    def from_excel(cls, filename, allow_X_in_peptides=False, label=True):
+    def from_excel(cls, filename, label=True):
         df = pd.read_excel(filename)
         allele_to_peptides_dict = {}
         for allele in df.columns:
@@ -251,4 +292,5 @@ class Dataset(object):
                 s.upper() for s in df[allele]
                 if isinstance(s, str) and len(s) > 0 and ("X" not in s)
             ]
-        return cls.from_dict(allele_to_peptides_dict, label=label)
+        return cls.from_allele_dict(
+            allele_to_peptides_dict, label=label)
