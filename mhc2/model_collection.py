@@ -71,7 +71,7 @@ class ModelCollection(object):
                 self._allele_to_ensemble_dict[allele] = ensemble
         return self._allele_to_ensemble_dict
 
-    def __getitem__(self, allele):
+    def get_ensemble(self, allele):
         allele_to_path_dict = self.allele_to_path_dict()
         allele = normalize_mhc_name(allele)
         if allele not in allele_to_path_dict:
@@ -86,6 +86,9 @@ class ModelCollection(object):
             ensemble = Ensemble.from_json_file(path)
             self._allele_to_ensemble_dict[allele] = ensemble
         return self._allele_to_ensemble_dict[allele]
+
+    def __getitem__(self, allele):
+        return self.get_ensemble(allele)
 
     def _allele_to_filename(self, allele):
         basename = allele.replace("*", "_")

@@ -16,3 +16,17 @@ def test_from_dataframe():
                     label_column_name: [True]})
                 dataset = Dataset.from_dataframe(df)
                 eq_(dataset, expected_dataset)
+
+def test_concat():
+    expected_dataset = Dataset(
+        alleles=["DRB1*01:01", "DRB1*01:02", "DRB1*01:02"],
+        peptides=["SIINFEKL", "QSIINFEKL", "QQSIINFEKL"],
+        labels=[True, True, False],
+        weights=[1.0, 2.0, 0.1])
+    split_datasets = [
+        Dataset(alleles=["DRB1*01:01"], peptides=["SIINFEKL"], labels=[True], weights=[1.0]),
+        Dataset(alleles=["DRB1*01:02"], peptides=["QSIINFEKL"], labels=[True], weights=[2.0]),
+        Dataset(alleles=["DRB1*01:02"], peptides=["QQSIINFEKL"], labels=[False], weights=[0.1])
+    ]
+    combined = Dataset.concat(split_datasets)
+    eq_(expected_dataset, combined)

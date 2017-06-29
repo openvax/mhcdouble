@@ -46,28 +46,28 @@ class Dataset(object):
             # comprised of "hits"
             labels = np.ones(n_peptides, dtype="bool")
         elif isinstance(labels, (float, int, bool)):
-            labels = np.array([labels] * n_peptides)
+            labels = np.array([labels] * n_peptides, dtype="bool")
         elif n_peptides != len(labels):
             raise ValueError(
                 "Length mismatch between peptides (%d) and labels (%d)" % (
                     n_peptides,
                     len(labels)))
         else:
-            labels = np.array(labels)
+            labels = np.array(labels, dtype="bool")
 
         if group_ids is None:
             # if sequence groups aren't given then put every
             # peptide in a singleton group
             group_ids = np.arange(n_peptides, dtype="int32")
         elif isinstance(group_ids, (float, int, bool)):
-            group_ids = np.array([group_ids] * n_peptides)
+            group_ids = np.array([group_ids] * n_peptides, dtype="int32")
         elif n_peptides != len(group_ids):
             raise ValueError(
                 "Length mismatch between peptides (%d) and groups (%d)" % (
                     n_peptides,
                     len(group_ids)))
         else:
-            group_ids = np.array(group_ids)
+            group_ids = np.array(group_ids, dtype="int32")
 
         if weights is None:
             # if weights aren't given then every element has the same
@@ -76,14 +76,14 @@ class Dataset(object):
             # group size (separately for positive vs. negative labels)
             weights = np.ones(n_peptides, dtype="float32")
         elif isinstance(weights, (float, int)):
-            weights = np.array([weights] * n_peptides)
+            weights = np.array([weights] * n_peptides, dtype="float32")
         elif n_peptides != len(weights):
             raise ValueError(
                 "Length mismatch between peptides (%d) and weights (%d)" % (
                     n_peptides,
                     len(labels)))
         else:
-            weights = np.array(weights)
+            weights = np.array(weights, dtype="float32")
 
         return alleles, peptides, labels, weights, group_ids
 
@@ -114,8 +114,18 @@ class Dataset(object):
             other_values = other_dict[column_name]
             for (x, y) in zip(values, other_values):
                 if x != y:
+                    print(x, y)
                     return False
         return True
+
+    def __ne__(self, other):
+        return not (self == other)
+
+    def __str__(self):
+        return "<Dataset with %d elements>\n%s" % (len(self), self.to_dataframe())
+
+    def __repr__(self):
+        return str(self)
 
     def __getitem__(self, indices):
         if isinstance(indices, slice):
@@ -138,6 +148,16 @@ class Dataset(object):
             labels=self.labels[index_array],
             weights=self.weights[index_array],
             group_ids=self.group_ids[index_array])
+
+    @classmethod
+    def _check_type(cls, maybe_dataset):
+        if maybe_dataset.__class__ is not cls:
+            raise TypeError("Expected %s : %s to be %s" % (
+                maybe_dataset, type(maybe_dataset), cls))
+
+    @classmethod
+    def make_empty(cls):
+        return cls(alleles=[], peptides=[], labels=[], weights=[], group_ids=[])
 
     def split(self, train_idx, test_idx):
         dataset_train = self[train_idx]
@@ -184,13 +204,20 @@ class Dataset(object):
             mask = [p_i == peptide for p_i in self.peptides]
             yield (peptide, self[mask])
 
+    def max_group_id(self):
+        if len(self) > 0:
+            return
+        else:
+            return -1
+
     def combine(self, other, preserve_group_ids=False):
+        self._check_type(other)
         peptides = list(self.peptides) + list(other.peptides)
         alleles = list(self.alleles) + list(other.alleles)
         labels = np.concatenate([self.labels, other.labels])
         weights = np.concatenate([self.weights, other.weights])
-        if not preserve_group_ids:
-            offset = (self.group_ids.max() + 1)
+        if not preserve_group_ids and len(self) > 0:
+            offset = self.group_ids.max() + 1
             other_group_ids = offset + other.group_ids
         else:
             other_group_ids = other.group_ids
@@ -202,6 +229,12 @@ class Dataset(object):
             weights=weights,
             group_ids=group_ids)
 
+    @classmethod
+    def concat(cls, datasets, preserve_group_ids=False):
+        combined = cls.make_empty()
+        for dataset in datasets:
+            combined = combined.combine(dataset, preserve_group_ids=preserve_group_ids)
+        return combined
 
     def to_dict(self):
         return OrderedDict([
