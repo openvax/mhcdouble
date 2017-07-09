@@ -12,8 +12,6 @@
 
 from argparse import ArgumentParser
 
-import pandas as pd
-
 from .common import parse_args
 from ..model_collection import ModelCollection
 
@@ -34,3 +32,4 @@ def main(args_list=None):
         print("%d alleles in %s" % (len(alleles), args.path))
         for allele in alleles:
             print("-- %s" % allele)
+

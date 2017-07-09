@@ -6,13 +6,13 @@ This library allows you to train and predict with a collection of allele-specifi
 peptide presentation models from categorical binding data (such as from a
 mass spec. assay).
 
-## Training
+## Training Convolutional Predictors
 
 Here's an example of a minimal invocation required to train a model on a new
 dataset:
 
 ```
-mhc2-train \
+mhc2-train-convolutional \
     --model-dir trained-models \
     --dataset dataset.csv
 ```
@@ -23,7 +23,7 @@ The file `dataset.csv` must contain the columns `allele`, `peptide`, and `hit`.
 You can also specifiy training parameters and architectural hyperparameters:
 
 ```
-mhc2-train \
+mhc2-train-convolutional \
     --model-dir trained-models \
     --dataset dataset.csv \
     --conv-activation linear \

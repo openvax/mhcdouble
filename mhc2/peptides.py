@@ -14,7 +14,8 @@ def filter_peptides(
         peptides,
         to_upper=True,
         exclude_set=set([]),
-        invalid_amino_acids="*XU"):
+        invalid_amino_acids="*XU",
+        remove_duplicates=True):
     """
     Strip and uppercase peptides (if necessary) and drop any
     empty sequences.
@@ -29,6 +30,8 @@ def filter_peptides(
             continue
         else:
             new_peptides.append(peptide)
+    if remove_duplicates:
+        new_peptides = list(set(new_peptides))
     return new_peptides
 
 

@@ -81,7 +81,7 @@ class Dataset(object):
             raise ValueError(
                 "Length mismatch between peptides (%d) and weights (%d)" % (
                     n_peptides,
-                    len(labels)))
+                    len(weights)))
         else:
             weights = np.array(weights, dtype="float32")
 

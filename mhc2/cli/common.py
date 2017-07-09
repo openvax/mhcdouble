@@ -27,3 +27,24 @@ def parse_bool(s):
         return False
     else:
         raise ValueError("Expected boolean value but got '%s'" % (s,))
+
+def split_by_multiple_seps(s, seps=["-", "_"]):
+    parts = [s]
+    for sep in seps:
+        new_parts = []
+        for part in parts:
+            new_parts.extend(part.split(sep))
+        parts = new_parts
+    return parts
+
+
+def parse_allele_from_filename(
+        filename,
+        seps=["-", "_"],
+        allele_prefixes=["DR", "DQ", "DP"]):
+    parts = split_by_multiple_seps(filename, seps)
+    for part in parts:
+        for prefix in allele_prefixes:
+            if part.startswith(prefix):
+                return part
+    return None

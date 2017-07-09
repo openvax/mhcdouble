@@ -136,18 +136,18 @@ def generate_independent_decoy_list_from_proteome(
 
 def augment_dataset_with_decoys(
         hit_dataset,
-        decoy_multiple,
+        decoys_per_hit,
         min_decoy_length=None,
         max_decoy_length=None):
     n_hits = len(hit_dataset)
+    n_decoys = int(n_hits * decoys_per_hit)
     decoy_peptides = generate_independent_decoy_list_from_proteome(
-        hit_dataset.peptides,
-        factor=decoy_multiple,
+        n_decoys=n_decoys,
+        positive_peptides=hit_dataset.peptides,
         min_length=min_decoy_length,
         max_length=max_decoy_length)
 
-    n_decoys = len(decoy_peptides)
-    assert n_decoys == int(n_hits * decoy_multiple)
+    assert n_decoys == len(decoy_peptides)
     decoy_mhc_alleles = list(np.random.choice(hit_dataset.alleles, size=n_decoys))
 
     sum_hit_weights = hit_dataset.weights.sum()
