@@ -22,23 +22,34 @@ from pepnet import Encoder
 
 from .dataset import Dataset
 
+class FixedLengthPredictor(object):
 
+    def __init__(self, length=9):
+        self.length = length
+        self.encoder = Encoder(variable_length_sequences=False)
 
-def encode(dataset, k):
-    encoder = Encoder(variable_length_sequences=False)
+    def encode_dataset(self, dataset):
+        peptides = dataset.peptides
+        if any(len(p) != self.length for p in peptides):
+            raise ValueError(
+                "Expected all peptides to be %d in length, got %s" % (
+                    self.length,
+                    {len(p) for p in peptides}))
+        X = self.encoder.encode_onehot(
 
-    X = encoder.encode_onehot(
-        dataset.peptides,
-        max_peptide_length=k)
-    # print("Generated one-hot matrix with shape: %s" % (X.shape,))
-    n_samples, expect_k, expect_20 = X.shape
-    assert expect_k == k, expect_k
-    assert expect_20 == 20, expect_20
-    X = X.reshape((n_samples, k * 20))
-    y = np.array(dataset.labels)
-    assert n_samples == len(y), len(y)
-    weights = np.array(dataset.weights)
-    return X, y, weights
+            max_peptide_length=self.length)
+        n_samples, expect_peptide_length, expect_n_amino_acids = X.shape
+        if expect_peptide_length != self.length:
+            raise ValueError("Expected 2nd dim to be %d but got %d" % (
+                self.length, expect_peptide_length))
+        if expect_n_amino_acids != 20:
+            raise ValueError("Expected final dimension to be 20 but got %d" % (
+                expect_n_amino_acids,))
+        X = X.reshape((n_samples, self.length * 20))
+        y = np.array(dataset.labels)
+        assert n_samples == len(y), len(y)
+        weights = np.array(dataset.weights)
+        return X, y, weights
 
 def compute_positional_weight_matrix(seqs, length=None):
     if not length:
