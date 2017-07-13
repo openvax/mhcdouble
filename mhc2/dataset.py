@@ -17,7 +17,7 @@ from six import string_types
 import numpy as np
 import pandas as pd
 
-from .mhc_names import normalize_mhc_name, normalize_mhc_names
+from .mhc_names import normalize_mhc_name
 
 class Dataset(object):
     """
@@ -30,16 +30,21 @@ class Dataset(object):
 
         n_peptides = len(peptides)
 
+        if alleles is None:
+            alleles = [None] * n_peptides
+        elif isinstance(alleles, string_types):
+            alleles = [normalize_mhc_name(alleles)] * n_peptides
+        else:
+            alleles = [
+                (normalize_mhc_name(allele) if allele  else None)
+                for allele in alleles
+            ]
+
         if n_peptides != len(alleles):
             raise ValueError(
                 "Length mismatch between peptides (%d) and alleles (%d)" % (
                     n_peptides,
                     len(alleles)))
-
-        if isinstance(alleles, string_types):
-            alleles = [normalize_mhc_name(alleles)] * n_peptides
-        else:
-            alleles = normalize_mhc_names(alleles)
 
         if labels is None:
             # if labels are not given then assume that the dataset is

@@ -189,7 +189,7 @@ def intersect_leaf_sequences(sequences, min_overlap_size=7):
             return None
     return result
 
-def split_into_sequence_groups(
+def assemble_and_assign_to_sequence_groups(
         sequences,
         min_overlap_size=MIN_ASSEMBLY_OVERLAP_SIZE,
         min_binding_core_size=MIN_BINDING_CORE_SIZE):
