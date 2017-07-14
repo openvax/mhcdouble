@@ -10,17 +10,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from serializable import Serializable
 from collections import defaultdict
+
+from .common import all_splits
+from .sequence_group import SequenceGroup
 
 MIN_ASSEMBLY_OVERLAP_SIZE = 5
 MIN_BINDING_CORE_SIZE = 7
 
 def naive_left_overlap(s, t, min_overlap_size=MIN_ASSEMBLY_OVERLAP_SIZE):
+    """
+    Returns number of characters on right side of input `s`
+    that are equal to the left side of input sequence `t`.
+    """
     if s[-min_overlap_size:] not in t:
         # if the smallest substring of `s` isn't in `t` then
         # stop before we try to find the overlapping piece
-        return None
+        return 0
 
     if t.startswith(s):
         return len(s)
@@ -31,7 +37,7 @@ def naive_left_overlap(s, t, min_overlap_size=MIN_ASSEMBLY_OVERLAP_SIZE):
         candidate = s[i:]
         if candidate == t[:len(candidate)]:
             return len(candidate)
-    return None
+    return 0
 
 def find_overlaps(sequences, min_overlap_size=MIN_ASSEMBLY_OVERLAP_SIZE):
     left_overlap_dict = defaultdict(list)
@@ -39,10 +45,9 @@ def find_overlaps(sequences, min_overlap_size=MIN_ASSEMBLY_OVERLAP_SIZE):
         for t in sequences:
             if s == t:
                 continue
-            if naive_left_overlap(s, t) is not None:
+            n_overlap = naive_left_overlap(s, t)
+            if n_overlap >= min_overlap_size:
                 left_overlap_dict[s].append(t)
-            elif naive_left_overlap(t, s) is not None:
-                left_overlap_dict[t].append(s)
     return left_overlap_dict
 
 def find_contained_sequences(contigs, short_sequences=None):
@@ -97,7 +102,7 @@ def assemble_overlapping_sequences(sequences):
     for (left_seq, right_seqs) in left_overlap_dict.items():
         right_seq = max(right_seqs, key=lambda x: len(x))
         n_overlap = naive_left_overlap(left_seq, right_seq)
-        assert n_overlap is not None
+        assert n_overlap is not None and n_overlap > 0
         combined = left_seq[:-n_overlap] + right_seq
         new_candidate_set.add(combined)
     return new_candidate_set
@@ -148,27 +153,14 @@ def assemble_sequences(sequences, min_overlap_size=MIN_ASSEMBLY_OVERLAP_SIZE):
         print("Assembly failed to converge!")
     return candidate_set
 
-
-class SequenceGroup(Serializable):
-    def __init__(
-            self,
-            contig,
-            children,
-            leaves,
-            binding_cores=[]):
-        self.contig = contig
-        self.children = children
-        self.leaves = leaves
-        self.binding_cores = binding_cores
-
-def intersect_leaf_sequences(sequences, min_overlap_size=7):
+def intersect_sequences(sequences, min_overlap_size=MIN_BINDING_CORE_SIZE):
     """
     Attempt to find minimal epitopes by intersecting all the leaves
     but if this fails then just fall back on using the leaf sequences
     without modification
     """
-    result = list(sequences)[0]
 
+    result = list(sequences)[0]
     if len(sequences) == 1:
         return result
 
@@ -181,13 +173,35 @@ def intersect_leaf_sequences(sequences, min_overlap_size=7):
             result,
             s,
             min_overlap_size=min_overlap_size)
-        if n_left_overlap is not None:
+        if n_left_overlap > 0:
             result = result[:n_left_overlap]
-        elif n_right_overlap is not None:
+        elif n_right_overlap > 0:
             result = result[-n_right_overlap:]
         else:
             return None
     return result
+
+def binding_cores_from_leaf_sequences(
+        sequences, min_overlap_size=MIN_BINDING_CORE_SIZE):
+
+    intersection = intersect_sequences(sequences, min_overlap_size=min_overlap_size)
+    if intersection is not None:
+        return [intersection]
+    best_candidate = sequences
+    # try spitting sequences into two groups, assuming that there are two
+    # distinct binding cores
+    for s1, s2 in all_splits(sequences, nonempty=True):
+        i1 = intersect_sequences(s1, min_overlap_size=min_overlap_size)
+        i2 = intersect_sequences(s2, min_overlap_size=min_overlap_size)
+        if i1 is not None and i2 is not None:
+            return [i1, i2]
+        if i1 is not None:
+            candidate = [i1] + list(s2)
+        elif i2 is not None:
+            candidate = [i2] + list(s1)
+        if len(candidate) < len(best_candidate):
+            best_candidate = candidate
+    return best_candidate
 
 def assemble_and_assign_to_sequence_groups(
         sequences,
@@ -210,13 +224,7 @@ def assemble_and_assign_to_sequence_groups(
         for c in children:
             if c not in child_dict:
                 leaves.add(c)
-        intersection = intersect_leaf_sequences(
-            leaves,
-            min_overlap_size=min_binding_core_size)
-        if not intersection:
-            binding_cores = list(leaves)
-        else:
-            binding_cores = [intersection]
+        binding_cores = binding_cores_from_leaf_sequences(leaves)
         group = SequenceGroup(
             contig=s,
             children=children,

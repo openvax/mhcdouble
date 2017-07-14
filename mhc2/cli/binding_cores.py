@@ -15,7 +15,7 @@ from argparse import ArgumentParser
 
 import numpy as np
 
-from .common import parse_args, parse_allele_from_filename
+from .common import parse_args
 
 from ..peptides import load_peptides_list_from_path
 from ..binding_core_predictor import BindingCorePredictor
@@ -25,29 +25,23 @@ parser = ArgumentParser(
 
 parser.add_argument("--hits", required=True)
 
-parser.add_argument("--decoys-per-hit", type=int, default=10)
-
 parser.add_argument("--binding-core-length", type=int, default=9)
-
-parser.add_argument("--allele", help="Allele name to use in training datasets")
 
 parser.add_argument(
     "--save-binding-core-training-csv",
     help="Optional path to CSV which saves training data for binding core predictor")
 
+parser.add_argument(
+    "--prob",
+    type=float,
+    default=0.05,
+    help="Prior probability that a random sequence is a binding core")
 
 def main(args_list=None):
     if not args_list:
         args_list = sys.argv[1:]
     args = parse_args(parser, args_list)
-    allele = args.allele
-    if not allele:
-        allele = parse_allele_from_filename(args.hits)
-    if not allele:
-        raise ValueError("Could not determine allele name, specify using --allele")
-
     hits = load_peptides_list_from_path(args.hits)
-
     bcp = BindingCorePredictor(length=args.binding_core_length)
     sequence_groups, contig_to_predictions = bcp.fit_predict(hits)
     n_correct = 0
@@ -60,11 +54,6 @@ def main(args_list=None):
         correct = any(
             predicted_binding_core in candidate_region
             for candidate_region in group.binding_cores)
-        if not correct:
-            print(group)
-            print(predicted_binding_core)
-            print(list(zip(subsequences, scores)))
-            print("---")
         n_correct += correct
         n_total += 1
     print("# correct = %d/%d" % (n_correct, n_total))

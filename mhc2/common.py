@@ -12,9 +12,39 @@
 
 
 from collections import defaultdict
+from itertools import chain, combinations
+import numpy as np
 
 def groupby(xs, keys):
     result = defaultdict(list)
     for (x, key) in zip(xs, keys):
         result[key].append(x)
     return result
+
+def powerset(iterable):
+    """
+    Powerset implementation from
+    https://docs.python.org/2/library/itertools.html#itertools.combinations
+    """
+    s = list(iterable)
+    return chain.from_iterable(combinations(s, r) for r in range(len(s) + 1))
+
+def all_splits(items, nonempty=False):
+    """
+    Split given items into all possible subsets (s1, s2) such that
+    s1.union(s2) gives back the original items.
+    """
+    full_set = set(items)
+    for s1 in powerset(full_set):
+        s1 = set(s1)
+        s2 = full_set.difference(s1)
+        if nonempty and (len(s1) == 0 or len(s2) == 0):
+            continue
+        yield s1, s2
+
+def shuffled_list(lst):
+    n = len(lst)
+    indices = np.arange(n)
+    np.random.shuffle(indices)
+    return [lst[i] for i in indices]
+

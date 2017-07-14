@@ -1,8 +1,7 @@
-from mhc2.binding_core import BindingCorePredictor
-from nose.tools import eq_
+from mhc2.fixed_length_predictor import FixedLengthPredictor
+import numpy as np
 
-def test_binding_core_predictor():
-    bcp = BindingCorePredictor()
+def test_fixed_length_predictor():
     # constructing an example where the binding core is
     #   SIINFEKLF
     # and we get hits with this sequence and various extra
@@ -30,6 +29,6 @@ def test_binding_core_predictor():
         "FFFSAIAMMMLM"
     ]
     hits = SIINFEKLF_hits + SQIQQQQLQ_hits + SAIAMMMLM_hits
-    _, result = bcp.fit_predict(hits)
-    expected_binding_cores = {"SAIAMMMLM", "SQIQQQQLQ", "SIINFEKLF"}
-    eq_(expected_binding_cores, set(result.values()))
+    predictor = FixedLengthPredictor()
+    y = predictor.fit_predict_hits(hits)
+    assert np.all(y > 0.5)

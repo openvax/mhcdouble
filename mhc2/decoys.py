@@ -15,6 +15,7 @@ from collections import Counter
 from pyensembl import ensembl_grch38
 
 from .dataset import Dataset
+from .sequence_group import SequenceGroup
 
 class PeptideGenerator(object):
     _genome_to_sequence = {}
@@ -159,3 +160,41 @@ def augment_dataset_with_decoys(
         labels=0,
         weights=decoy_weight)
     return hit_dataset.combine(decoy_dataset, preserve_group_ids=False)
+
+def generate_decoy_sequence_groups(
+            n_decoy_loci,
+            decoys_per_locus=5,
+            binding_core_length=9,
+            contig_length=40):
+    sequence_groups = []
+    contigs = generate_independent_decoy_list_from_proteome(
+        n_decoys=n_decoy_loci,
+        min_length=contig_length,
+        max_length=contig_length)
+    half_idx = contig_length // 2
+    n_decoys = n_decoy_loci * decoys_per_locus
+    start_indices = np.random.randint(
+        low=0,
+        high=half_idx,
+        size=n_decoys)
+    end_indices = np.random.randint(
+        low=half_idx + binding_core_length,
+        high=contig_length,
+        size=n_decoys)
+    offset = 0
+    for contig in contigs:
+        binding_core = contig[half_idx:half_idx + binding_core_length]
+        children = []
+        for _ in range(decoys_per_locus):
+            start = start_indices[offset]
+            end = end_indices[offset]
+            children.append(contig[start:end])
+            offset += 1
+
+        sequence_groups.append(SequenceGroup(
+            contig=contig,
+            binding_cores=[binding_core],
+            leaves=[binding_core],
+            children=children))
+    return sequence_groups
+
