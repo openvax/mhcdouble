@@ -21,6 +21,20 @@ def groupby(xs, keys):
         result[key].append(x)
     return result
 
+def groupby_average_array(xs, indices, size):
+    idx_to_group = groupby(xs, indices)
+    result = np.zeros(size)
+    for idx, group in idx_to_group.items():
+        result[idx] = np.mean(group)
+    return result
+
+def groupby_max_array(xs, indices, size):
+    idx_to_group = groupby(xs, indices)
+    result = np.zeros(size)
+    for idx, group in idx_to_group.items():
+        result[idx] = np.max(group)
+    return result
+
 def powerset(iterable):
     """
     Powerset implementation from

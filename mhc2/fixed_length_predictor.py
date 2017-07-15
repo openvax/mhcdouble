@@ -11,13 +11,14 @@
 # limitations under the License.
 
 import numpy as np
+from pepnet import Predictor, NumericInput, Output
 
 from sklearn.linear_model import LogisticRegressionCV
-
 from .binding_core_predictor import BindingCorePredictor
-from .common import groupby
+from .common import groupby, groupby_average_array, groupby_max_array
 from .assembly import assemble_and_assign_to_sequence_groups
 from .decoys import generate_decoy_sequence_groups
+from .sequence_group import flatten_sequence_groups
 
 class FixedLengthPredictor(object):
     def __init__(
@@ -26,31 +27,40 @@ class FixedLengthPredictor(object):
             n_binding_cores_train=1,
             n_binding_cores_predict=1,
             n_nterm=1,
-            n_cterm=1):
+            n_cterm=1,
+            max_binding_core_iters=100,
+            epochs=20):
         self.binding_core_size = binding_core_size
-        self.binding_core_predictor = self._make_binding_core_predictor()
-        self.model = self._make_model()
+        self.binding_core_predictor = self._make_binding_core_predictor(
+            max_binding_core_iters)
+        self.model = None
         self.n_binding_cores_train = n_binding_cores_train
         self.n_binding_cores_predict = n_binding_cores_predict
         self.n_nterm = n_nterm
         self.n_cterm = n_cterm
+        self.epochs = epochs
 
-    def _make_binding_core_predictor(self):
-        return BindingCorePredictor(length=self.binding_core_size)
+    def _make_binding_core_predictor(self, max_binding_core_iters=100):
+        return BindingCorePredictor(
+            length=self.binding_core_size,
+            max_iters=max_binding_core_iters)
 
-    def _make_model(self):
-        return LogisticRegressionCV()
+    def _make_nn_model(
+            self,
+            n_features,
+            dense_layer_sizes=[20],
+            batch_normalization=True):
+        return Predictor(
+                inputs=NumericInput(
+                    n_features,
+                    dense_layer_sizes=dense_layer_sizes,
+                    dense_batch_normalization=batch_normalization),
+                outputs=Output(1, activation="sigmoid"))
 
-    def _flatten_sequence_groups(self, sequence_groups):
-        child_sequences = []
-        group_ids = []
-        for group_id, group in enumerate(sequence_groups):
-            for c in group.children:
-                child_sequences.append(c)
-                group_ids.append(group_id)
-        return child_sequences, group_ids
+    def _make_lr_model(self, penalty="l2"):
+        return LogisticRegressionCV(penalty=penalty)
 
-    def _encode(self, sequences, label=True, group_ids=None):
+    def _encode(self, sequences, n_binding_cores=1, label=True, group_ids=None):
         if group_ids is None:
             group_ids = np.arange(len(sequences))
         binding_core_list = []
@@ -61,23 +71,24 @@ class FixedLengthPredictor(object):
         labels = []
         weights = []
         kept_group_id_list = []
+        k = self.binding_core_size
         for group_id, peptides in groupby(sequences, group_ids).items():
             count = 0
             for c in peptides:
-                if len(c) < self.binding_core_size:
+                if len(c) < k:
                     continue
-                curr_binding_cores = \
-                    self.binding_core_predictor.predict_top_binding_cores(
+                curr_binding_cores, indices = \
+                    self.binding_core_predictor.predict_top_binding_cores_with_indices(
                         sequence=c,
-                        n=self.n_binding_cores_train)
+                        n=n_binding_cores)
                 binding_core_list.extend(curr_binding_cores)
                 Nterm = c[:self.n_nterm]
                 Cterm = c[-self.n_cterm:]
-                for binding_core in curr_binding_cores:
-                    idx = c.index(binding_core)
+                for binding_core, idx in zip(curr_binding_cores, indices):
                     distance_from_Nterm.append(idx)
-                    distance_from_Cterm.append(
+                    curr_distance_from_Cterm = (
                         len(c) - self.binding_core_size - idx)
+                    distance_from_Cterm.append(curr_distance_from_Cterm)
                     Nterm_list.append(Nterm)
                     Cterm_list.append(Cterm)
                     kept_group_id_list.append(group_id)
@@ -127,9 +138,14 @@ class FixedLengthPredictor(object):
     def _encode_sequence_groups(
             self,
             sequence_groups,
+            n_binding_cores=1,
             label=True):
-        sequences, group_ids = self._flatten_sequence_groups(sequence_groups)
-        return self._encode(sequences=sequences, label=label, group_ids=group_ids)
+        sequences, group_ids = flatten_sequence_groups(sequence_groups)
+        return self._encode(
+            sequences=sequences,
+            label=label,
+            group_ids=group_ids,
+            n_binding_cores=n_binding_cores)
 
     def create_training_data(
             self,
@@ -137,9 +153,15 @@ class FixedLengthPredictor(object):
             decoy_sequence_groups,
             balance_class_weights=True):
         X_pos, y_pos, weights_pos, group_ids_pos = \
-            self._encode_sequence_groups(hit_sequence_groups, label=True)
+            self._encode_sequence_groups(
+                hit_sequence_groups,
+                label=True,
+                n_binding_cores=self.n_binding_cores_train)
         X_neg, y_neg, weights_neg, group_ids_neg = \
-            self._encode_sequence_groups(decoy_sequence_groups, label=False)
+            self._encode_sequence_groups(
+                decoy_sequence_groups,
+                label=False,
+                n_binding_cores=self.n_binding_cores_train)
         X = np.vstack([X_pos, X_neg])
         y = np.concatenate([y_pos, y_neg])
         if balance_class_weights:
@@ -158,10 +180,20 @@ class FixedLengthPredictor(object):
         self.binding_core_predictor.fit_sequence_groups(hit_sequence_groups)
         X, y, weights, _ = self.create_training_data(
             hit_sequence_groups, decoy_sequence_groups)
+        # self.model = self._make_model(n_features=X.shape[1])
+        # self.model.fit(X, y, sample_weight=weights, epochs=self.epochs)
+        self.model = self._make_lr_model()
         self.model.fit(X, y, sample_weight=weights)
+        return self
 
-    def fit_predict_hits(self, hits, decoys_per_hit=10):
-        hit_sequence_groups = assemble_and_assign_to_sequence_groups(hits)
+    def _predict_scores(self, X):
+        if hasattr(self.model, 'predict_proba'):
+            return self.model.predict_proba(X)[:, -1]
+        else:
+            assert hasattr(self.model, 'predict_scores')
+            return self.model.predict_scores(X)
+
+    def fit_positive_sequence_groups(self, hit_sequence_groups, decoys_per_hit=10):
         n_hit_groups = len(hit_sequence_groups)
         n_decoy_loci = n_hit_groups * decoys_per_hit
         decoy_sequence_groups = generate_decoy_sequence_groups(
@@ -169,14 +201,39 @@ class FixedLengthPredictor(object):
         self.fit_sequence_groups(
             hit_sequence_groups=hit_sequence_groups,
             decoy_sequence_groups=decoy_sequence_groups)
-        return self.predict(hits)
+        return self
+
+    def fit_peptides(self, peptides, decoys_per_hit=10):
+        hit_sequence_groups = assemble_and_assign_to_sequence_groups(peptides)
+        self.fit_positive_sequence_groups(
+            hit_sequence_groups,
+            decoys_per_hit=decoys_per_hit)
+        return self
+
+    def fit_predict_peptides(self, peptides, decoys_per_hit=10):
+        self.fit_peptides(peptides, decoys_per_hit=decoys_per_hit)
+        return self.predict(peptides)
 
     def predict(self, sequences):
-        n = len(sequences)
-        X, _, weights, original_indices = self._encode(sequences)
-        y_pred = self.model.predict_proba(X)[:, -1]
-        idx_to_predictions = groupby(y_pred, original_indices)
-        result = np.zeros(n)
-        for idx, predictions in idx_to_predictions.items():
-            result[idx] = np.mean(predictions)
-        return result
+        X, _, weights, original_indices = self._encode(
+            sequences,
+            n_binding_cores=self.n_binding_cores_predict)
+        y_pred = self._predict_scores(X)
+        return groupby_max_array(
+            y_pred,
+            indices=original_indices,
+            size=len(sequences))
+
+    def predict_sequences_with_group_ids(self, sequences, group_ids, n_groups):
+        y_pred = self.predict(sequences)
+        return groupby_average_array(
+            y_pred,
+            indices=group_ids,
+            size=n_groups)
+
+    def predict_sequence_groups(self, sequence_groups):
+        sequences, group_ids = flatten_sequence_groups(sequence_groups)
+        return self.predict_sequences_with_group_ids(
+            sequences,
+            group_ids,
+            n_groups=len(sequence_groups))

@@ -23,3 +23,15 @@ class SequenceGroup(Serializable):
         self.children = children
         self.leaves = leaves
         self.binding_cores = binding_cores
+
+def flatten_sequence_groups(sequence_groups):
+    """
+    Returns list of children and list of group_ids for each child sequence
+    """
+    child_sequences = []
+    group_ids = []
+    for group_id, group in enumerate(sequence_groups):
+        for c in group.children:
+            child_sequences.append(c)
+            group_ids.append(group_id)
+    return child_sequences, group_ids

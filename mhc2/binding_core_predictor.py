@@ -44,7 +44,8 @@ class BindingCorePredictor(object):
             },
             prior_prob=0.05,
             model_scoring_fn=roc_auc_score,
-            n_cv_folds=3):
+            n_cv_folds=3,
+            max_iters=100):
         self.length = length
         self.encoder = encoder
         self.predictor_class = predictor_class
@@ -53,6 +54,7 @@ class BindingCorePredictor(object):
         self.n_cv_folds = n_cv_folds
         self.prior_prob = prior_prob
         self.model = None
+        self.max_iters = max_iters
 
     def _make_model(self, C, penalty="l1", solver="liblinear"):
         return self.predictor_class(
@@ -60,7 +62,7 @@ class BindingCorePredictor(object):
             class_weight={0: 1.0 / self.prior_prob, 1: 1.0},
             **self.predictor_kwargs)
 
-    def _cv_fit(self, dataset, Cs=15, min_C_exponent=-3, max_C_exponent=3):
+    def _cv_fit(self, dataset, Cs=15, min_C_exponent=-2, max_C_exponent=2):
         X, y, weights, group_ids = self.encode_dataset(dataset)
         C_values =  10.0 ** np.linspace(min_C_exponent, max_C_exponent, Cs)
         C_to_scores = defaultdict(list)
@@ -168,7 +170,7 @@ class BindingCorePredictor(object):
         return negative_dataset.combine(
             positive_subset, preserve_group_ids=True)
 
-    def fit_predict(self, hit_peptides, max_training_iters=100):
+    def fit_predict(self, hit_peptides):
         """
         Given a set of MHCII ligands, assemble their sequences into longer
         contigs, infer candidate binding core regions, iteratively train
@@ -178,30 +180,28 @@ class BindingCorePredictor(object):
         for each subsequence.
         """
         sequence_groups = assemble_and_assign_to_sequence_groups(hit_peptides)
-        return self.fit_predict_sequence_groups(
-            sequence_groups,
-            max_training_iters=max_training_iters)
+        return self.fit_predict_sequence_groups(sequence_groups)
 
 
-    def fit_predict_sequence_groups(self, sequence_groups, max_training_iters=100):
+    def fit_predict_sequence_groups(self, sequence_groups):
         """
         Trains binding core predictor from list of SequenceGroup objects and
         then returns subsequence predictions for all kmers within sequence
         group contigs.
         """
-        self.fit_sequence_groups(sequence_groups, max_training_iters=max_training_iters)
+        self.fit_sequence_groups(sequence_groups)
         contig_to_predictions = self.predict_subsequence_scores_for_sequence_groups(
             sequence_groups)
         return sequence_groups, contig_to_predictions
 
-    def fit_sequence_groups(self, sequence_groups, max_training_iters=100):
+    def fit_sequence_groups(self, sequence_groups):
         """
         Iterative training of a fixed length binding core classifier which is
         then used to refine the training data.
         """
         dataset = self._build_training_set(sequence_groups)
         best_score = 0
-        for i in range(max_training_iters):
+        for i in range(self.max_iters):
             if self.model is None:
                 # if a model hasn't been trained yet then just use the initial
                 # training set where all candidate binding cores have equal weight
@@ -304,6 +304,19 @@ class BindingCorePredictor(object):
         """
         return self.predict_top_binding_cores(sequence, n=1)[0]
 
+    def predict_top_binding_cores_with_indices(self, sequence, n=1):
+        """
+        Return up to `n` top scoring binding core sequence indices
+        """
+
+        subsequences, scores = self.predict_subsequence_scores(sequence)
+        if n == 1:
+            i = np.argmax(scores)
+            return [subsequences[i]], [i]
+        else:
+            descending_indices = np.argsort(scores)[::-1]
+            top_indices = descending_indices[:n]
+            return [subsequences[i] for i in top_indices], top_indices
 
     def predict_top_binding_cores(self, sequence, n=1):
         """
