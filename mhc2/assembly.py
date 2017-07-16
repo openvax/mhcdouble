@@ -183,7 +183,6 @@ def intersect_sequences(sequences, min_overlap_size=MIN_BINDING_CORE_SIZE):
 
 def binding_cores_from_leaf_sequences(
         sequences, min_overlap_size=MIN_BINDING_CORE_SIZE):
-
     intersection = intersect_sequences(sequences, min_overlap_size=min_overlap_size)
     if intersection is not None:
         return [intersection]
@@ -203,7 +202,7 @@ def binding_cores_from_leaf_sequences(
             best_candidate = candidate
     return best_candidate
 
-def assemble_and_assign_to_sequence_groups(
+def assemble_into_sequence_groups(
         sequences,
         min_overlap_size=MIN_ASSEMBLY_OVERLAP_SIZE,
         min_binding_core_size=MIN_BINDING_CORE_SIZE):

@@ -163,7 +163,8 @@ def augment_dataset_with_decoys(
 
 def generate_decoy_sequence_groups(
             n_decoy_loci,
-            decoys_per_locus=5,
+            min_decoys_per_locus=1,
+            max_decoys_per_locus=10,
             binding_core_length=9,
             contig_length=40):
     sequence_groups = []
@@ -172,20 +173,26 @@ def generate_decoy_sequence_groups(
         min_length=contig_length,
         max_length=contig_length)
     half_idx = contig_length // 2
-    n_decoys = n_decoy_loci * decoys_per_locus
+
+    max_decoys = int(np.ceil(n_decoy_loci * max_decoys_per_locus))
     start_indices = np.random.randint(
         low=0,
         high=half_idx,
-        size=n_decoys)
+        size=max_decoys)
     end_indices = np.random.randint(
         low=half_idx + binding_core_length,
         high=contig_length,
-        size=n_decoys)
+        size=max_decoys)
     offset = 0
-    for contig in contigs:
+    count_per_locus = np.random.randint(
+        low=min_decoys_per_locus,
+        high=max_decoys_per_locus + 1,
+        size=n_decoy_loci)
+    for i, contig in enumerate(contigs):
         binding_core = contig[half_idx:half_idx + binding_core_length]
+        n_peptides = count_per_locus[i]
         children = []
-        for _ in range(decoys_per_locus):
+        for _ in range(n_peptides):
             start = start_indices[offset]
             end = end_indices[offset]
             children.append(contig[start:end])
@@ -195,6 +202,6 @@ def generate_decoy_sequence_groups(
             contig=contig,
             binding_cores=[binding_core],
             leaves=[binding_core],
-            children=children))
+            children=set(children)))
     return sequence_groups
 

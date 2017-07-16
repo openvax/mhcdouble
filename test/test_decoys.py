@@ -14,7 +14,10 @@ def test_generate_independent_decoy_list_from_proteome():
     eq_(max(len(p) for p in decoys), 15)
 
 def test_generate_decoy_sequence_groups():
-    groups = generate_decoy_sequence_groups(n_decoy_loci=10, decoys_per_locus=3)
+    groups = generate_decoy_sequence_groups(
+        n_decoy_loci=10,
+        min_decoys_per_locus=3,
+        max_decoys_per_locus=3)
     eq_(len(groups), 10)
     for group in groups:
         eq_(len(group.children), 3)

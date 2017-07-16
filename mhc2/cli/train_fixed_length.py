@@ -19,7 +19,7 @@ import numpy as np
 from sklearn.model_selection import KFold
 from sklearn.metrics import roc_auc_score
 
-from .common import parse_args, parse_allele_from_filename
+from .common import parse_args
 
 from ..peptides import load_peptides_list_from_path
 from ..fixed_length_predictor import FixedLengthPredictor
@@ -49,6 +49,7 @@ parser.add_argument("--cterm-residues", type=int, default=1)
 parser.add_argument("--prediction-binding-cores", type=int, default=1)
 parser.add_argument("--training-binding-cores", type=int, default=1)
 
+
 def main(args_list=None):
     if not args_list:
         args_list = sys.argv[1:]
@@ -56,15 +57,7 @@ def main(args_list=None):
     print(args)
 
     allele_to_aucs_dict = defaultdict(list)
-    for glob_or_filename in args.hits:
-        for filename in glob.glob(glob_or_filename):
-            allele = args.allele
-            if not allele:
-                allele = parse_allele_from_filename(filename)
-            if not allele:
-                raise ValueError("Could not determine allele name, specify using --allele")
-            print("-- Loading %s (allele=%s)" % (filename, allele))
-            hits = load_peptides_list_from_path(filename)
+
             hit_sequence_groups = assemble_and_assign_to_sequence_groups(hits)
             n_hit_loci = len(hit_sequence_groups)
             kfold = KFold(args.folds, shuffle=True)

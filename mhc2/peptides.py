@@ -57,7 +57,7 @@ def load_path_to_peptides_dict(paths, to_upper=True, remove_duplicates=True):
         paths = [paths]
     path_to_peptides_dict = {}
     for glob_or_path in paths:
-        for path in glob.glob(glob_or_path):
+        for path in glob(glob_or_path):
             peptides = load_peptides_list_from_path(path)
             print("-- Loaded %d peptides from %s" % (
                 len(peptides),

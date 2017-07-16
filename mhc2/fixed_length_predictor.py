@@ -16,7 +16,7 @@ from pepnet import Predictor, NumericInput, Output
 from sklearn.linear_model import LogisticRegressionCV
 from .binding_core_predictor import BindingCorePredictor
 from .common import groupby, groupby_average_array, groupby_max_array
-from .assembly import assemble_and_assign_to_sequence_groups
+from .assembly import assemble_into_sequence_groups
 from .decoys import generate_decoy_sequence_groups
 from .sequence_group import flatten_sequence_groups
 
@@ -204,7 +204,7 @@ class FixedLengthPredictor(object):
         return self
 
     def fit_peptides(self, peptides, decoys_per_hit=10):
-        hit_sequence_groups = assemble_and_assign_to_sequence_groups(peptides)
+        hit_sequence_groups = assemble_into_sequence_groups(peptides)
         self.fit_positive_sequence_groups(
             hit_sequence_groups,
             decoys_per_hit=decoys_per_hit)

@@ -62,3 +62,14 @@ def shuffled_list(lst):
     np.random.shuffle(indices)
     return [lst[i] for i in indices]
 
+
+def split_by_multiple_seps(s, seps=["-", "_"]):
+    parts = [s]
+    for sep in seps:
+        new_parts = []
+        for part in parts:
+            new_parts.extend(part.split(sep))
+        parts = new_parts
+    return parts
+
+

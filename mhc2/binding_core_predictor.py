@@ -23,7 +23,7 @@ import numpy as np
 from pepnet import Encoder
 
 from .dataset import Dataset
-from .assembly import assemble_and_assign_to_sequence_groups
+from .assembly import assemble_into_sequence_groups
 from .common import groupby
 from .motifs import compatibility_score_for_binding_cores
 
@@ -179,7 +179,7 @@ class BindingCorePredictor(object):
         dictionary mapping each contig to tuple of subsequences and scores
         for each subsequence.
         """
-        sequence_groups = assemble_and_assign_to_sequence_groups(hit_peptides)
+        sequence_groups = assemble_into_sequence_groups(hit_peptides)
         return self.fit_predict_sequence_groups(sequence_groups)
 
 
