@@ -41,7 +41,6 @@ input_group.add_argument(
     "--hits-json",
     help="JSON representation of sequence groups")
 
-
 parser.add_argument(
     "--decoys-per-hit",
     type=float,

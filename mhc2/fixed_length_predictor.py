@@ -18,7 +18,7 @@ from .binding_core_predictor import BindingCorePredictor
 from .common import groupby, groupby_average_array, groupby_max_array
 from .assembly import assemble_into_sequence_groups
 from .decoys import generate_decoy_sequence_groups
-from .sequence_group import flatten_sequence_groups
+from .dataset import Dataset
 
 class FixedLengthPredictor(object):
     def __init__(
@@ -135,17 +135,21 @@ class FixedLengthPredictor(object):
         assert len(group_ids) == n_samples
         return X, labels, weights, group_ids
 
+    def _encode_dataset(self, dataset, n_binding_cores=1):
+        return self._encode(
+            sequences=dataset.peptides,
+            label=dataset.labels,
+            group_ids=dataset.group_ids,
+            n_binding_cores=n_binding_cores)
+
     def _encode_sequence_groups(
             self,
             sequence_groups,
             n_binding_cores=1,
             label=True):
-        sequences, group_ids = flatten_sequence_groups(sequence_groups)
-        return self._encode(
-            sequences=sequences,
-            label=label,
-            group_ids=group_ids,
-            n_binding_cores=n_binding_cores)
+        dataset = Dataset.from_sequence_groups(
+            sequence_groups, label=label)
+        return self._encode_dataset(dataset, n_binding_cores=n_binding_cores)
 
     def create_training_data(
             self,
@@ -231,9 +235,12 @@ class FixedLengthPredictor(object):
             indices=group_ids,
             size=n_groups)
 
-    def predict_sequence_groups(self, sequence_groups):
-        sequences, group_ids = flatten_sequence_groups(sequence_groups)
+    def predict_dataset(self, dataset):
         return self.predict_sequences_with_group_ids(
-            sequences,
-            group_ids,
-            n_groups=len(sequence_groups))
+            dataset.peptides,
+            dataset.group_ids,
+            n_groups=len(set(dataset.group_ids)))
+
+    def predict_sequence_groups(self, sequence_groups):
+        dataset = Dataset.from_sequence_groups(sequence_groups)
+        return self.predict_dataset(dataset)

@@ -96,9 +96,9 @@ class BindingCorePredictor(object):
         binding_core_training_peptides = []
         binding_core_training_labels = []
         binding_core_training_weights = []
-        binding_core_training_group_ids = []
+        binding_core_training_contigs = []
         k = self.length
-        for group_id, g in enumerate(sequence_groups):
+        for g in sequence_groups:
             # for now we're going to ignore short binding cores and sequences with
             # multiple candidate binding cores
             binding_cores = [c for c in g.binding_cores if len(c) >= k]
@@ -117,7 +117,7 @@ class BindingCorePredictor(object):
             binding_core_training_peptides.extend(positive_peptides)
             binding_core_training_labels.extend([True] * n_pos)
             binding_core_training_weights.extend([1.0 / n_pos] * n_pos)
-            binding_core_training_group_ids.extend([group_id] * n_pos)
+            binding_core_training_contigs.extend([g.contig] * n_pos)
 
 
             negative_peptides = []
@@ -130,13 +130,13 @@ class BindingCorePredictor(object):
                 binding_core_training_peptides.extend(negative_peptides)
                 binding_core_training_labels.extend([False] * n_neg)
                 binding_core_training_weights.extend([1.0 / n_neg] * n_neg)
-                binding_core_training_group_ids.extend([group_id] * n_neg)
+                binding_core_training_contigs.extend([g.contig] * n_neg)
         return Dataset(
             alleles=None,
             peptides=binding_core_training_peptides,
             labels=binding_core_training_labels,
             weights=binding_core_training_weights,
-            group_ids=binding_core_training_group_ids)
+            contigs=binding_core_training_contigs)
 
 
     def _find_binding_cores(self, candidate_dict):
@@ -160,15 +160,14 @@ class BindingCorePredictor(object):
         negative_dataset = dataset[~dataset.labels]
         positive_peptide_groups = groupby(
             positive_dataset.peptides,
-            keys=positive_dataset.group_ids)
-        group_to_binding_core = self._find_binding_cores(positive_peptide_groups)
-        n_kept = len(group_to_binding_core)
+            keys=positive_dataset.contigs)
+        contig_to_binding_core = self._find_binding_cores(positive_peptide_groups)
+        n_kept = len(contig_to_binding_core)
         positive_subset = Dataset(
             alleles=dataset.alleles[:n_kept],
-            peptides=list(group_to_binding_core.values()),
-            group_ids=list(group_to_binding_core.keys()))
-        return negative_dataset.combine(
-            positive_subset, preserve_group_ids=True)
+            peptides=list(contig_to_binding_core.values()),
+            contigs=list(contig_to_binding_core.keys()))
+        return negative_dataset.combine(positive_subset)
 
     def fit_predict(self, hit_peptides):
         """

@@ -51,11 +51,20 @@ def flatten_sequence_groups(sequence_groups):
     """
     child_sequences = []
     group_ids = []
+    contigs = []
+    binding_cores = []
     for group_id, group in enumerate(sequence_groups):
         for c in group.children:
             child_sequences.append(c)
             group_ids.append(group_id)
-    return child_sequences, group_ids
+            contigs.append(group.contig)
+            binding_core = ""
+            for seq in group.binding_cores:
+                if seq in c:
+                    binding_core = seq
+                    break
+            binding_cores.append(binding_core)
+    return child_sequences, group_ids, contigs, binding_cores
 
 def print_sequence_group_stats(groups):
     print("# groups = %d" % len(groups))

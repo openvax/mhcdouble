@@ -15,24 +15,23 @@ from collections import defaultdict
 from itertools import chain, combinations
 import numpy as np
 
+def groupby_array_fn(xs, indices, size, fn):
+    idx_to_group = groupby(xs, indices)
+    result = np.zeros(size)
+    for idx, group in idx_to_group.items():
+        result[idx] = fn(group)
+    return result
+
+def groupby_average_array(xs, indices, size):
+    return groupby_array_fn(xs, indices, size, fn=np.mean)
+
+def groupby_max_array(xs, indices, size):
+    return groupby_array_fn(xs, indices, size, fn=np.max)
+
 def groupby(xs, keys):
     result = defaultdict(list)
     for (x, key) in zip(xs, keys):
         result[key].append(x)
-    return result
-
-def groupby_average_array(xs, indices, size):
-    idx_to_group = groupby(xs, indices)
-    result = np.zeros(size)
-    for idx, group in idx_to_group.items():
-        result[idx] = np.mean(group)
-    return result
-
-def groupby_max_array(xs, indices, size):
-    idx_to_group = groupby(xs, indices)
-    result = np.zeros(size)
-    for idx, group in idx_to_group.items():
-        result[idx] = np.max(group)
     return result
 
 def powerset(iterable):
