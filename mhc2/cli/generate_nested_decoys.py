@@ -20,7 +20,8 @@ from ..assembly import assemble_into_sequence_groups
 from ..sequence_group import (
     load_sequence_groups_from_json_file,
     save_sequence_groups_to_json_file,
-    save_sequence_groups_to_txt_file
+    save_sequence_groups_to_txt_file,
+    flatten_sequence_groups
 )
 
 
@@ -66,6 +67,7 @@ parser.add_argument("--output-txt")
 
 def main(args_list=None):
     args = parse_args(parser, args_list)
+    print(args)
     if args.hits_csv:
         dataset = Dataset.from_csv(args.hits_csv)
         hits = dataset[dataset.labels].peptides
@@ -79,14 +81,18 @@ def main(args_list=None):
         raise ValueError(
             "Specify hits via --hits-csv, --hits-txt, --hits-json")
     n_hit_loci = len(sequence_groups)
+    peptides, _ = flatten_sequence_groups(sequence_groups)
+    print("Assembled %d hit peptides into %d loci" % (
+        len(peptides),
+        n_hit_loci))
     n_decoy_loci = int(args.decoys_per_hit * n_hit_loci)
+    print("Generating %d decoy loci" % n_decoy_loci)
     decoys = generate_decoy_sequence_groups(
         n_decoy_loci=n_decoy_loci,
         min_decoys_per_locus=args.min_peptides_per_locus,
         max_decoys_per_locus=args.max_peptides_per_locus,
         binding_core_length=args.binding_core_length,
         contig_length=args.contig_length)
-
     if args.output_txt:
         save_sequence_groups_to_txt_file(decoys, path=args.output_txt)
     if args.output_json:

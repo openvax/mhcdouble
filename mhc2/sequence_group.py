@@ -108,7 +108,7 @@ def save_sequence_groups_to_txt_file(groups, path):
 
 def serialize_sequence_groups_to_json(groups):
     group_json_strings = [g.to_json() for g in groups]
-    return "[\n%s\n]" % (",\n".join(group_json_strings))
+    return "[\n%s\n]\n" % (",\n".join(group_json_strings))
 
 def save_sequence_groups_to_json_file(groups, path):
     with open(path, "w") as f:
