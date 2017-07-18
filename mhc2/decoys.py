@@ -189,8 +189,10 @@ def generate_decoy_sequence_groups(
         high=max_decoys_per_locus + 1,
         size=n_decoy_loci)
     for i, contig in enumerate(contigs):
+        print(i, contig)
         binding_core = contig[half_idx:half_idx + binding_core_length]
         n_peptides = count_per_locus[i]
+        print(n_peptides)
         children = []
         for _ in range(n_peptides):
             start = start_indices[offset]

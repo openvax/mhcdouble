@@ -226,7 +226,7 @@ def assemble_into_sequence_groups(
         binding_cores = binding_cores_from_leaf_sequences(leaves)
         group = SequenceGroup(
             contig=s,
-            children=children,
+            children=sorted(children, key=lambda x: (len(x), s)),
             leaves=leaves,
             binding_cores=binding_cores)
         groups.append(group)

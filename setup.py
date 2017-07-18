@@ -81,7 +81,7 @@ if __name__ == '__main__':
                 'mhc2-generate-nested-decoys=mhc2.cli.generate_nested_decoys:main',
                 'mhc2-list-alleles=mhc2.cli.list_alleles:main',
                 'mhc2-train-fixed-length=mhc2.cli.train_fixed_length:main',
-                'mhc2-evaluate-netmhciipan=mhc2.cli.evaluate_netmhciipan:main',
+                'mhc2-predict-netmhciipan=mhc2.cli.predict_netmhciipan:main',
             ]
         }
     )

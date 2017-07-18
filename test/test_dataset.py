@@ -1,5 +1,5 @@
 from nose.tools import eq_
-from mhc2 import Dataset
+from mhc2 import Dataset, SequenceGroup
 import pandas as pd
 
 def test_from_dataframe():
@@ -30,3 +30,24 @@ def test_concat():
     ]
     combined = Dataset.concat(split_datasets)
     eq_(expected_dataset, combined)
+
+
+def test_dataset_from_sequence_groups():
+    contig = "DEVIGQVLSTLKSEDVPYTAALTAVRPSRVARDVA"
+    sequence_groups = [
+        SequenceGroup(
+            contig=contig,
+            children=[
+                "DEVIGQVLSTLKSEDVPYTAALTAVRPSRV",
+                          "LKSEDVPYTAALTAVRPSRVARDVA",
+                                "PYTAALTAVR",
+                               "VPYTAALTAV",
+            ],
+            leaves={"PYTAALTAVR", "VPYTAALTAV"},
+            binding_cores={"PYTAALTAV"})
+    ]
+    dataset_from_sequence_groups = Dataset.from_sequence_groups(sequence_groups)
+    peptides = dataset_from_sequence_groups.peptides
+    dataset_from_peptides = Dataset(peptides=peptides)
+    dataset_assembled = dataset_from_peptides.assemble_contigs()
+    eq_(dataset_from_sequence_groups, dataset_assembled)

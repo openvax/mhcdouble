@@ -60,9 +60,16 @@ class FixedLengthPredictor(object):
     def _make_lr_model(self, penalty="l2"):
         return LogisticRegressionCV(penalty=penalty)
 
-    def _encode(self, sequences, n_binding_cores=1, label=True, group_ids=None):
+    def _encode(
+            self,
+            sequences,
+            n_binding_cores=1,
+            sequence_labels=True,
+            group_ids=None):
         if group_ids is None:
             group_ids = np.arange(len(sequences))
+        if isinstance(sequence_labels, (int, bool)):
+            sequence_labels = np.array([sequence_labels] * len(sequences))
         binding_core_list = []
         distance_from_Nterm = []
         distance_from_Cterm = []
@@ -72,19 +79,27 @@ class FixedLengthPredictor(object):
         weights = []
         kept_group_id_list = []
         k = self.binding_core_size
+        sequence_to_label_dict = {
+            sequence: label
+            for (sequence, label)
+            in zip(sequences, sequence_labels)
+
+        }
         for group_id, peptides in groupby(sequences, group_ids).items():
             count = 0
             for c in peptides:
                 if len(c) < k:
                     continue
+                label = sequence_to_label_dict[c]
                 curr_binding_cores, indices = \
                     self.binding_core_predictor.predict_top_binding_cores_with_indices(
                         sequence=c,
                         n=n_binding_cores)
-                binding_core_list.extend(curr_binding_cores)
                 Nterm = c[:self.n_nterm]
                 Cterm = c[-self.n_cterm:]
                 for binding_core, idx in zip(curr_binding_cores, indices):
+                    binding_core_list.append(binding_core)
+                    labels.append(label)
                     distance_from_Nterm.append(idx)
                     curr_distance_from_Cterm = (
                         len(c) - self.binding_core_size - idx)
@@ -97,14 +112,31 @@ class FixedLengthPredictor(object):
                 continue
             weight = 1.0 / count
             weights.extend([weight] * count)
-            labels.extend([label] * count)
         n_samples = len(binding_core_list)
-        assert len(distance_from_Nterm) == n_samples
-        assert len(distance_from_Cterm) == n_samples
-        assert len(Nterm_list) == n_samples
-        assert len(Cterm_list) == n_samples
-        assert len(labels) == n_samples
-        assert len(weights) == n_samples
+        if len(distance_from_Nterm) != n_samples:
+            raise ValueError(
+                "Expected %d samples but got %d distance_from_Nterm" % (
+                    n_samples, len(distance_from_Nterm)))
+        if len(distance_from_Cterm) != n_samples:
+            raise ValueError(
+                "Expected %d samples but got %d distance_from_Cterm" % (
+                    n_samples, len(distance_from_Cterm)))
+        if len(Nterm_list) != n_samples:
+            raise ValueError(
+                "Expected %d samples but got %d Nterm_list" % (
+                    n_samples, len(Nterm_list)))
+        if len(Cterm_list) != n_samples:
+            raise ValueError(
+                "Expected %d samples but got %d Cterm_list" % (
+                    n_samples, len(Cterm_list)))
+        if len(labels) != n_samples:
+            raise ValueError(
+                "Expected %d samples but got %d labels" % (
+                    n_samples, len(labels)))
+        if len(weights) != n_samples:
+            raise ValueError(
+                "Expected %d samples but got %d weights" % (
+                    n_samples, len(weights)))
         sequence_features = [
             bc + nterm + cterm
             for (bc, nterm, cterm)
@@ -135,10 +167,14 @@ class FixedLengthPredictor(object):
         assert len(group_ids) == n_samples
         return X, labels, weights, group_ids
 
-    def _encode_dataset(self, dataset, n_binding_cores=1):
+    def _encode_dataset(self, dataset, n_binding_cores=1, label=None):
+        if label is None:
+            sequence_labels = dataset.labels
+        else:
+            sequence_labels = label
         return self._encode(
             sequences=dataset.peptides,
-            label=dataset.labels,
+            sequence_labels=sequence_labels,
             group_ids=dataset.group_ids,
             n_binding_cores=n_binding_cores)
 
@@ -146,10 +182,14 @@ class FixedLengthPredictor(object):
             self,
             sequence_groups,
             n_binding_cores=1,
-            label=True):
+            label=None):
         dataset = Dataset.from_sequence_groups(
-            sequence_groups, label=label)
-        return self._encode_dataset(dataset, n_binding_cores=n_binding_cores)
+            sequence_groups,
+            label=label)
+        return self._encode_dataset(
+            dataset,
+            n_binding_cores=n_binding_cores,
+            label=label)
 
     def create_training_data(
             self,

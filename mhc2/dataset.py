@@ -20,6 +20,8 @@ import pandas as pd
 
 from .mhc_names import normalize_mhc_name
 from .sequence_group import SequenceGroup
+from .assembly import assemble_into_sequence_groups
+from .peptides import load_allele_to_peptides_dict
 
 class DatasetRow(Serializable):
     def __init__(self, allele, peptide, label, weight, contig, binding_core):
@@ -123,7 +125,7 @@ class Dataset(Serializable):
 
     def __init__(
             self,
-            alleles=[],
+            alleles=None,
             peptides=[],
             labels=None,
             weights=None,
@@ -359,6 +361,17 @@ class Dataset(Serializable):
         return cls.from_allele_dict(
             allele_to_peptides_dict, label=label)
 
+    @classmethod
+    def from_peptides_text_file(cls, filename, label=True):
+        return cls.from_peptides_text_files([filename], label=label)
+
+    @classmethod
+    def from_peptides_text_files(cls, filenames, label=True):
+        allele_to_peptides_dict = load_allele_to_peptides_dict(filenames)
+        datasets = []
+        for allele, peptides in allele_to_peptides_dict.items():
+            datasets.append(Dataset(alleles=allele, labels=label, peptides=peptides))
+        return cls.concat(datasets)
 
     def groupby_allele_dict(self):
         allele_to_rows = defaultdict(list)
@@ -371,42 +384,67 @@ class Dataset(Serializable):
         }
 
     def groupby_allele(self):
-        for allele in self.distinct_alleles():
-            mask = [a_i == allele for a_i in self.alleles]
-            yield (allele, self[mask])
+        for allele, dataset in self.groupby_allele_dict().items():
+            yield allele, dataset
 
     def groupby_peptide(self):
         for peptide in self.distinct_peptides():
             mask = [p_i == peptide for p_i in self.peptides]
             yield (peptide, self[mask])
 
-    def group_peptides_by_allele_and_contig(self):
+    def group_peptides_by_allele_and_contig_dict(self):
         result = defaultdict(list)
         for (peptide, allele, contig) in zip(self.peptides, self.alleles, self.contigs):
             result[(allele, contig)].append(peptide)
         return result
 
-    def group_rows_by_contig(self):
+    def group_peptides_by_allele_and_contig(self):
+        for (allele, contig), peptides in self.group_peptides_by_allele_and_contig_dict():
+            yield (allele, contig), peptides
+
+    def group_rows_by_contig_dict(self):
         result = defaultdict(list)
         for row in self.rows:
             result[row.contig].append(row)
         return result
 
-    def group_rows_by_allele_and_label(self):
+    def group_rows_by_contig(self):
+        for contig, rows in self.group_rows_by_contig_dict.items():
+            yield contig, rows
+
+    def group_rows_by_allele_and_label_dict(self):
         row_groups =  defaultdict(list)
         for row in self.rows:
             key = (row.allele, row.label)
             row_groups[key].append(row)
         return row_groups
 
-    def group_by_allele_and_label(self):
+    def group_rows_by_allele_and_label(self):
+        for (key, rows) in self.group_rows_by_allele_and_label_dict().items():
+            yield key, rows
+
+    def group_by_allele_and_label_dict(self):
         return {
             key: Dataset.from_rows(rows)
             for (key, rows) in self.group_rows_by_allele_and_label()
         }
 
+    def group_by_allele_and_label(self):
+        for key, dataset in self.group_by_allele_and_label_dict().items():
+            yield key, dataset
+
+    def group_peptides_by_allele_and_label_dict(self):
+        return {
+            key: [row.peptide for row in rows]
+            for (key, rows) in self.group_rows_by_allele_and_label()
+        }
+
+    def group_peptides_by_allele_and_label(self):
+        for key, peptides in self.group_peptides_by_allele_and_label_dict().items():
+            yield key, peptides
+
     def allele_and_contig_pairs_to_unique_ids(self):
-        d = self.group_peptides_by_allele_and_contig()
+        d = self.group_peptides_by_allele_and_contig_dict()
         return {key: i for i, key in enumerate(d.keys())}
 
     @property
@@ -426,10 +464,14 @@ class Dataset(Serializable):
     def assemble_contigs(self):
         """
         Ignoring group contigs and use overlap assembly to construct
-        new sequences containing peptides for each allele.
+        longer sequences containing peptides for each allele.
         """
-        # allele_and_label_to_dataset = self.group_rows_by_allele_and_label()
-        pass
+        datasets = []
+        for (allele, label), peptides in self.group_peptides_by_allele_and_label():
+            sequence_groups = assemble_into_sequence_groups(peptides)
+            datasets.append(Dataset.from_sequence_groups(
+                sequence_groups, allele=allele, label=label))
+        return Dataset.concat(datasets)
 
     @classmethod
     def from_sequence_groups(
@@ -442,7 +484,7 @@ class Dataset(Serializable):
         """
         rows = []
         for group in sequence_groups:
-            for c in group.children:
+            for c in sorted(group.children, key=lambda x: (len(x), x)):
                 binding_core = None
                 for seq in group.binding_cores:
                     if seq in c:
