@@ -483,7 +483,14 @@ class Dataset(Serializable):
         Create flattened Dataset from list of SequenceGroup objects
         """
         rows = []
+
+        def sort_by_increasing_len(s):
+            return len(s)
+
         for group in sequence_groups:
+            binding_cores = group.binding_cores
+            if len(binding_cores) > 1:
+                binding_cores = sorted(binding_cores, key=sort_by_increasing_len)
             for c in sorted(group.children, key=lambda x: (len(x), x)):
                 binding_core = None
                 for seq in group.binding_cores:

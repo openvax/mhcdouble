@@ -59,3 +59,11 @@ def test_dataset_from_sequence_groups_with_allele():
         allele="HLA-A*02:01",
         sequence_groups=sequence_groups)
     eq_(dataset_from_sequence_groups.unique_alleles(), {"HLA-A*02:01"})
+
+def test_dataset_shuffle():
+    dataset = Dataset(
+        alleles=["HLA-A0201"] * 20 + ["H-2-Kd"] * 20,
+        peptides=["A" * 9] * 40)
+    shuffled = dataset.shuffle()
+    eq_(set(shuffled.alleles[:20]), {"HLA-A0201", "H-2-Kd"})
+

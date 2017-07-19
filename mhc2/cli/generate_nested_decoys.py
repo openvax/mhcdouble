@@ -93,16 +93,19 @@ def main(args_list=None):
             binding_core_length=args.binding_core_length,
             contig_length=args.contig_length,
             exclude_subsequences=binding_core_subsequences)
-        decoy_dataset = Dataset.from_sequence_groups(allele=allele, sequence_groups=decoys)
+        decoy_dataset = Dataset.from_sequence_groups(
+            allele=allele,
+            label=False,
+            sequence_groups=decoys)
         decoy_datasets.append(decoy_dataset)
         allele_to_decoy_sequence_groups[allele] = decoys
-
 
     if args.output_txt:
         all_sequence_groups = []
         for _, sg in allele_to_decoy_sequence_groups.items():
             all_sequence_groups.extend(sg)
         save_sequence_groups_to_txt_file(all_sequence_groups, path=args.output_txt)
+
     if args.output_csv:
-        dataset = Dataset.from_sequence_groups(decoys)
-        dataset.to_csv(args.output_csv)
+        combined_dataset = Dataset.concat(decoy_datasets)
+        combined_dataset.to_csv(args.output_csv)

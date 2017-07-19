@@ -80,7 +80,7 @@ dq_alpha_to_beta = {
 def normalize_mhc_name(name):
     if len(name) == 7 and name.startswith("DRB"):
         name = "DRB1" + name[3:]
-    if not name.startswith("HLA"):
+    if name[:2] != "H2" and name[:3] not in {"HLA", "H-2"}:
         name = "HLA-" + name
     name = name.replace("_", "")
     name = name.replace(":", "")

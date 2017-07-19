@@ -70,5 +70,5 @@ def main(args_list=None):
         df["netmhciipan_ic50"] = ic50_pred
         df["netmhciipan_percentile_rank"] = percentile_rank_pred
         dataframes.append(df)
-    df = pd.concat(dataframes)
-    df.to_csv(args.output_csv, index=False)
+        combined_df = pd.concat(dataframes)
+        combined_df.to_csv(args.output_csv, index=False)
