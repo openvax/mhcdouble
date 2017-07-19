@@ -337,7 +337,7 @@ class Dataset(Serializable):
         return cls.from_dataframe(pd.read_csv(filename))
 
     @classmethod
-    def from_allele_dict(cls, allele_to_peptides_dict, label=True):
+    def from_allele_to_peptides_dict(cls, allele_to_peptides_dict, label=True):
         """
         Create Dataset from allele->peptide dictionary of hits
         """
@@ -358,8 +358,17 @@ class Dataset(Serializable):
                 s.upper() for s in df[allele]
                 if isinstance(s, str) and len(s) > 0 and ("X" not in s)
             ]
-        return cls.from_allele_dict(
+        return cls.from_allele_to_peptides_dict(
             allele_to_peptides_dict, label=label)
+
+    @classmethod
+    def from_allele_to_sequence_groups_dict(cls, allele_to_sequence_groups_dict, label=True):
+        datasets = []
+        for (allele, sequence_groups) in allele_to_sequence_groups_dict.items():
+            datasets.append(
+                Dataset.from_sequence_groups(
+                    sequence_groups, allele=allele, label=label))
+        return Dataset.concat(datasets)
 
     @classmethod
     def from_peptides_text_file(cls, filename, label=True):

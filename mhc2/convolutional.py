@@ -50,8 +50,7 @@ class ConvolutionalPredictor(object):
         self.n_models = n_models
         self.training_patience = training_patience
         self.max_training_epochs = max_training_epochs
-        self.models = []
-        self.model_weights = []
+        self._clear_models()
 
     def _tile_over_long_peptides(self, peptides):
         new_peptides = []
@@ -74,7 +73,6 @@ class ConvolutionalPredictor(object):
                     new_indices.append(i)
                     count += 1
                 new_counts.extend([count] * count)
-
         return new_peptides, np.array(new_indices), np.array(new_counts)
 
     def _expand_arrays_for_long_peptides(self, peptides, labels, weights):
@@ -166,10 +164,14 @@ class ConvolutionalPredictor(object):
         rescaled_auc = max(0, (2 * (last_best_auc - 0.5))) ** 2
         return rescaled_auc
 
+    def _clear_models(self):
+        self.models = []
+        self.model_weights = []
+
     def fit_dataset(self, dataset):
         assert len(dataset.unique_alleles()) == 1, \
             "Can only train one allele at a time"
-        self.models = []
+        self._clear_models()
         dataset = dataset.shuffle()
         cv = GroupKFold(n_splits=self.n_models)
         for fold, (train_idx, test_idx) in enumerate(cv.split(

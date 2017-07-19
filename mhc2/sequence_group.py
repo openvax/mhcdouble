@@ -111,7 +111,7 @@ def save_sequence_groups_to_txt_file(groups, path):
             f.write(label + "%s\n" % g.contig)
             if len(g.binding_cores) == 1 and len(g.binding_cores[0]) == len(g.contig):
                 continue
-            for c in g.binding_cores:
+            for c in g.children:
                 n_spaces = g.contig.index(c)
                 f.write(" " * len(label) + " " * n_spaces + c + "\n")
 
