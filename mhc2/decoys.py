@@ -166,15 +166,21 @@ def generate_decoy_sequence_groups(
             min_decoys_per_locus=1,
             max_decoys_per_locus=10,
             binding_core_length=9,
-            contig_length=40):
+            contig_length=45,
+            exclude_subsequences=set([])):
+    if exclude_subsequences:
+        n_decoy_loci_with_extra = int(1.2 * n_decoy_loci)
+    else:
+        n_decoy_loci_with_extra = n_decoy_loci
+
     sequence_groups = []
     contigs = generate_independent_decoy_list_from_proteome(
-        n_decoys=n_decoy_loci,
+        n_decoys=n_decoy_loci_with_extra,
         min_length=contig_length,
         max_length=contig_length)
     half_idx = contig_length // 2
 
-    max_decoys = int(np.ceil(n_decoy_loci * max_decoys_per_locus))
+    max_decoys = int(np.ceil(n_decoy_loci_with_extra * max_decoys_per_locus))
     start_indices = np.random.randint(
         low=0,
         high=half_idx,
@@ -187,12 +193,10 @@ def generate_decoy_sequence_groups(
     count_per_locus = np.random.randint(
         low=min_decoys_per_locus,
         high=max_decoys_per_locus + 1,
-        size=n_decoy_loci)
+        size=n_decoy_loci_with_extra)
     for i, contig in enumerate(contigs):
-        print(i, contig)
         binding_core = contig[half_idx:half_idx + binding_core_length]
         n_peptides = count_per_locus[i]
-        print(n_peptides)
         children = []
         for _ in range(n_peptides):
             start = start_indices[offset]
@@ -205,5 +209,28 @@ def generate_decoy_sequence_groups(
             binding_cores=[binding_core],
             leaves=[binding_core],
             children=set(children)))
+    if exclude_subsequences:
+        new_sequence_groups = []
+        kmer_sizes = {len(exclude) for exclude in exclude_subsequences}
+
+        for i, g in enumerate(sequence_groups):
+            contig = g.contig
+            kmers = set([])
+            for k in kmer_sizes:
+                kmers.update([
+                    contig[i:i + k] for i in range(len(contig) - k + 1)])
+            if any([kmer in exclude_subsequences for kmer in kmers]):
+                continue
+            new_sequence_groups.append(g)
+        n_filtered_sequence_groups = len(new_sequence_groups)
+        n_dropped = len(sequence_groups) - n_filtered_sequence_groups
+        if n_dropped > 0:
+            print("-- Dropped %d/%d decoy sequence groups" % (
+                n_dropped,
+                len(sequence_groups)))
+        sequence_groups = new_sequence_groups
+
+    if len(sequence_groups) > n_decoy_loci:
+        sequence_groups = sequence_groups[:n_decoy_loci]
     return sequence_groups
 

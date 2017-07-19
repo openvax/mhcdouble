@@ -32,22 +32,30 @@ def test_concat():
     eq_(expected_dataset, combined)
 
 
+contig = "DEVIGQVLSTLKSEDVPYTAALTAVRPSRVARDVA"
+sequence_groups = [
+    SequenceGroup(
+        contig=contig,
+        children=[
+            "DEVIGQVLSTLKSEDVPYTAALTAVRPSRV",
+                      "LKSEDVPYTAALTAVRPSRVARDVA",
+                            "PYTAALTAVR",
+                           "VPYTAALTAV",
+        ],
+        leaves={"PYTAALTAVR", "VPYTAALTAV"},
+        binding_cores={"PYTAALTAV"})
+]
+
 def test_dataset_from_sequence_groups():
-    contig = "DEVIGQVLSTLKSEDVPYTAALTAVRPSRVARDVA"
-    sequence_groups = [
-        SequenceGroup(
-            contig=contig,
-            children=[
-                "DEVIGQVLSTLKSEDVPYTAALTAVRPSRV",
-                          "LKSEDVPYTAALTAVRPSRVARDVA",
-                                "PYTAALTAVR",
-                               "VPYTAALTAV",
-            ],
-            leaves={"PYTAALTAVR", "VPYTAALTAV"},
-            binding_cores={"PYTAALTAV"})
-    ]
     dataset_from_sequence_groups = Dataset.from_sequence_groups(sequence_groups)
     peptides = dataset_from_sequence_groups.peptides
     dataset_from_peptides = Dataset(peptides=peptides)
     dataset_assembled = dataset_from_peptides.assemble_contigs()
     eq_(dataset_from_sequence_groups, dataset_assembled)
+    eq_(dataset_from_sequence_groups.unique_alleles(), {None})
+
+def test_dataset_from_sequence_groups_with_allele():
+    dataset_from_sequence_groups = Dataset.from_sequence_groups(
+        allele="HLA-A*02:01",
+        sequence_groups=sequence_groups)
+    eq_(dataset_from_sequence_groups.unique_alleles(), {"HLA-A*02:01"})

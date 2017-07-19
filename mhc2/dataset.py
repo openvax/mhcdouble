@@ -239,13 +239,13 @@ class Dataset(Serializable):
         assert len(right) == 0
         return left
 
-    def distinct_contigs(self):
+    def unique_contigs(self):
         return set(self.contigs)
 
-    def distinct_alleles(self):
+    def unique_alleles(self):
         return set(self.alleles)
 
-    def distinct_peptides(self):
+    def unique_peptides(self):
         return set(self.peptides)
 
     def combine(self, other):
@@ -388,7 +388,7 @@ class Dataset(Serializable):
             yield allele, dataset
 
     def groupby_peptide(self):
-        for peptide in self.distinct_peptides():
+        for peptide in sorted(self.unique_peptides(), key=lambda p: (len(p), p)):
             mask = [p_i == peptide for p_i in self.peptides]
             yield (peptide, self[mask])
 
@@ -409,7 +409,7 @@ class Dataset(Serializable):
         return result
 
     def group_rows_by_contig(self):
-        for contig, rows in self.group_rows_by_contig_dict.items():
+        for contig, rows in self.group_rows_by_contig_dict().items():
             yield contig, rows
 
     def group_rows_by_allele_and_label_dict(self):

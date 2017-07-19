@@ -46,7 +46,7 @@ def main(args_list=None):
         args_list = sys.argv[1:]
     args = parse_args(parser, args_list)
     print(args)
-    if len(args.hits_txt) > 0:
+    if args.hits_txt and len(args.hits_txt) > 0:
         dataset = Dataset.from_peptides_text_files(args.hits_txt)
         dataset = dataset.assemble_contigs()
     else:
@@ -60,15 +60,15 @@ def main(args_list=None):
         netmhciipan = NetMHCIIpan([allele])
 
         # pad peptides with alanines in case they're shorter than 9mer
-        peptides = ensure_peptide_lengths(dataset.peptides)
+        peptides = ensure_peptide_lengths(df.peptide)
         n_peptides = len(peptides)
         binding_predictions = netmhciipan.predict_peptides(peptides)
         ic50_pred = np.array([x.affinity for x in binding_predictions])
         percentile_rank_pred = np.array([x.percentile_rank for x in binding_predictions])
         assert len(ic50_pred) == n_peptides
         assert len(percentile_rank_pred) == n_peptides
-        df["ic50"] = ic50_pred
-        df["percentile_rank"] = percentile_rank_pred
+        df["netmhciipan_ic50"] = ic50_pred
+        df["netmhciipan_percentile_rank"] = percentile_rank_pred
         dataframes.append(df)
     df = pd.concat(dataframes)
-    df.to_csv(args.output_csv)
+    df.to_csv(args.output_csv, index=False)
