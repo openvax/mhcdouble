@@ -5,13 +5,16 @@ from pepnet import Predictor, SequenceInput, Output
 import numpy as np
 
 MAX_PEPTIDE_LENGTH = 30
-FIRST_CONV_SIZES = {1: 4, 3: 4, 8: 4, 9: 16, 10: 4}
-SECOND_CONV_SIZES = {1: 8, 3: 8, 5: 8, 7: 8, 9: 8}
-CONV_DROPOUT = 0.25
+
+FIRST_CONV_SIZES = {9: 32} # {1: 4, 3: 4, 8: 4, 9: 16, 10: 4}
+SECOND_CONV_SIZES = {9: 32} # {1: 8, 5: 8, 9: 8}
+CONV_DROPOUT = 0 # 0.25
 CONV_ACTIVATION = "relu"
-DENSE_DROPOUT = 0.25
+DENSE_DROPOUT = 0.25 # 0.25
 DENSE_ACTIVATION = "relu"
-GLOBAL_BATCH_NORMALIZATION = True
+DENSE_LAYER_SIZES = [32]
+GLOBAL_BATCH_NORMALIZATION = True # True
+
 EMBEDDING_DIM = 24
 BATCH_SIZE = 32
 
@@ -24,7 +27,7 @@ class ConvolutionalPredictor(object):
             conv_dropout=CONV_DROPOUT,
             conv_activation="relu",
             global_pooling_batch_normalization=GLOBAL_BATCH_NORMALIZATION,
-            dense_layer_sizes=[],
+            dense_layer_sizes=DENSE_LAYER_SIZES,
             dense_dropout=DENSE_DROPOUT,
             dense_activation=DENSE_ACTIVATION,
             add_start_tokens=True,
@@ -188,7 +191,7 @@ class ConvolutionalPredictor(object):
 
         scores = np.zeros(len(peptides), dtype="float64")
         weights = np.zeros(len(peptides), dtype="float64")
-        extended_peptides, extended_peptide_indices = self._tile_over_long_peptides(peptides)
+        extended_peptides, extended_peptide_indices, _ = self._tile_over_long_peptides(peptides)
 
         assert len(extended_peptides) == len(extended_peptide_indices)
         assert len(extended_peptides) >= len(peptides)
