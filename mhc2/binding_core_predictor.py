@@ -25,7 +25,7 @@ from pepnet import Encoder
 from .dataset import Dataset
 from .assembly import assemble_into_sequence_groups
 from .common import groupby
-from .motifs import compatibility_score_for_binding_cores
+# from .motifs import compatibility_score_for_binding_cores
 
 from sklearn.metrics import roc_auc_score
 from sklearn.linear_model import LogisticRegression
@@ -38,10 +38,9 @@ class BindingCorePredictor(object):
             encoder=Encoder(variable_length_sequences=False),
             length=9,
             predictor_class=LogisticRegression,
-            predictor_kwargs={
-                "penalty":"l1",
-                "solver": "liblinear",
-            },
+            lr_penalty="l2",
+            lr_solver="liblinear",
+            predictor_kwargs={},
             prior_prob=0.05,
             model_scoring_fn=roc_auc_score,
             n_cv_folds=3,
@@ -55,12 +54,15 @@ class BindingCorePredictor(object):
         self.prior_prob = prior_prob
         self.model = None
         self.max_iters = max_iters
+        self.lr_penalty = lr_penalty
+        self.lr_solver = lr_solver
 
-    def _make_model(self, C, penalty="l1", solver="liblinear"):
+    def _make_model(self, C):
         return self.predictor_class(
             C=C,
             class_weight={0: 1.0 / self.prior_prob, 1: 1.0},
-            **self.predictor_kwargs)
+            penalty=self.lr_penalty,
+            solver=self.lr_solver)
 
     def _cv_fit(self, dataset, Cs=15, min_C_exponent=-2, max_C_exponent=2):
         X, y, weights, group_ids = self.encode_dataset(dataset)
@@ -74,14 +76,17 @@ class BindingCorePredictor(object):
                 model = self._make_model(C=C)
                 model.fit(X_train, y_train, sample_weight=weights_train)
                 y_pred = model.predict_proba(X_test)[:, -1]
-                auc = roc_auc_score(y_true=y_test, y_score=y_pred, sample_weight=weights_test)
+                auc = roc_auc_score(
+                    y_true=y_test,
+                    y_score=y_pred,
+                    sample_weight=weights_test)
                 C_to_scores[C].append(auc)
         C_to_average_score = {C: np.mean(scores) for (C, scores) in C_to_scores.items()}
         best_C, best_score = max(C_to_average_score.items(), key=lambda x: x[1])
-        print("[CV] Selected model with C=%0.4f (AUC=%0.4f)" % (best_C, best_score))
+        print("[BindingCorePredictor] Selected model with C=%0.4f (AUC=%0.4f)" % (best_C, best_score))
         model = self._make_model(C=best_C)
         model.fit(X, y, sample_weight=weights)
-        print("[CV] Sparsity = %0.4f" % (np.mean(np.isclose(model.coef_.flatten(), 0))))
+        print("[BindingCorePredictor] Sparsity = %0.4f" % (np.mean(np.isclose(model.coef_.flatten(), 0))))
         return model, best_score, best_C
 
     def _build_training_set(
@@ -152,7 +157,7 @@ class BindingCorePredictor(object):
         """
         result = {}
         for group_id, peptides in candidate_dict.items():
-            result[group_id] = self.predict_best_peptide(peptides)
+            result[group_id] = self.select_best_peptide(peptides)
         return result
 
     def _restrict_dataset_to_best_binding_cores(self, dataset):
@@ -181,6 +186,11 @@ class BindingCorePredictor(object):
         sequence_groups = assemble_into_sequence_groups(hit_peptides)
         return self.fit_predict_sequence_groups(sequence_groups)
 
+    def fit_dataset(self, dataset):
+        pos_dataset = dataset[dataset.labels]
+        sequence_groups = pos_dataset.to_sequence_groups()
+        self.fit_sequence_groups(sequence_groups)
+        return self
 
     def fit_predict_sequence_groups(self, sequence_groups):
         """
@@ -211,8 +221,7 @@ class BindingCorePredictor(object):
             selected_binding_cores = current_dataset[current_dataset.labels].peptides
             if len(selected_binding_cores) == 0:
                 raise ValueError("No binding cores in dataset: %s" % dataset)
-            pssm_score = compatibility_score_for_binding_cores(selected_binding_cores)
-            print("Iter #%d, PSSM score = %0.4f" % (i + 1, pssm_score))
+            # pssm_score = compatibility_score_for_binding_cores(selected_binding_cores)
             self.model, auc, _ = self._cv_fit(current_dataset)
             if auc > best_score:
                 best_score = auc
@@ -264,7 +273,7 @@ class BindingCorePredictor(object):
         assert len(X) == len(peptides), X.shape
         return X
 
-    def predict_best_peptide(self, peptides):
+    def select_best_peptide(self, peptides):
         """
         Returns peptide among the inputs with the highest predicted
         binding core score (along with the score itself)
@@ -370,3 +379,18 @@ class BindingCorePredictor(object):
         for group in sequence_groups:
             result[group.contig] = self.predict_subsequence_scores(group.contig)
         return result
+
+    def predict_peptides(self, long_sequences):
+        """
+        For each long sequence, predict score for every subsequence
+        and then return mean of those scores.
+        """
+        max_scores = np.zeros(len(long_sequences), dtype="float64")
+        for i, sequence in enumerate(long_sequences):
+            subsequences = self._subsequences(sequence)
+            scores = self.predict_scores_for_peptides(subsequences)
+            if len(scores) == 1:
+                max_scores[i] = scores[0]
+            else:
+                max_scores[i] = np.mean(scores)
+        return max_scores
