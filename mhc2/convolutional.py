@@ -195,7 +195,7 @@ class ConvolutionalPredictor(object):
 
         assert len(extended_peptides) == len(extended_peptide_indices)
         assert len(extended_peptides) >= len(peptides)
-        for model, weight in zip(self.model, self.model_weights):
+        for model, weight in zip(self.models, self.model_weights):
             extended_scores = model.predict(extended_peptides) * weight
             for i, x in zip(extended_peptide_indices, extended_scores):
                 scores[i] += x
