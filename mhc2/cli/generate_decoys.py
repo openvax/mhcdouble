@@ -12,10 +12,9 @@
 
 from argparse import ArgumentParser
 
-import pandas as pd
-
 from .common import parse_args
 from ..dataset import Dataset
+from ..decoys import augment_dataset_with_decoys
 
 parser = ArgumentParser(description="Extend a dataset with decoys")
 parser.add_argument(
@@ -24,6 +23,12 @@ parser.add_argument(
     - "allele" : string (can also be "mhc")
     - "peptide" : string (can also be "seq")"""),
     required=True)
+
+parser.add_argument(
+    "--decoys-per-hit",
+    type=float,
+    default=10.0,
+    help="How many decoys to generate for every hit")
 
 parser.add_argument(
     "--output-csv",
@@ -36,4 +41,7 @@ parser.add_argument(
 def main(args_list=None):
     args = parse_args(parser, args_list)
     dataset = Dataset.from_csv(args.input_csv)
-    dataset.to_csv(args.output_csv)
+    augmented_dataset = augment_dataset_with_decoys(
+        dataset,
+        decoys_per_hit=args.decoys_per_hit)
+    augmented_dataset.to_csv(args.output_csv)

@@ -11,35 +11,59 @@
 # limitations under the License.
 
 import math
-from collections import OrderedDict
+from collections import OrderedDict, defaultdict
+from serializable import Serializable
 
 from six import string_types
 import numpy as np
 import pandas as pd
 
-from .mhc_names import normalize_mhc_name, normalize_mhc_names
+from .mhc_names import normalize_mhc_name
+from .sequence_group import SequenceGroup
+from .assembly import assemble_into_sequence_groups
+from .peptides import load_allele_to_peptides_dict
 
-class Dataset(object):
+class DatasetRow(Serializable):
+    def __init__(self, allele, peptide, label, weight, contig, binding_core):
+        self.allele = allele
+        self.peptide = peptide
+        self.label = label
+        self.weight = weight
+        self.contig = contig
+        self.binding_core = binding_core
+
+class Dataset(Serializable):
     """
     Training data for one or more alleles of Class II MHC peptide presentation
     """
     def _validate_and_normalize(
-            self, alleles, peptides, labels, weights, group_ids):
+            self,
+            alleles,
+            peptides,
+            labels,
+            weights,
+            contigs,
+            binding_cores):
         if isinstance(peptides, string_types):
             peptides = [peptides]
 
         n_peptides = len(peptides)
+
+        if alleles is None:
+            alleles = [None] * n_peptides
+        elif isinstance(alleles, string_types):
+            alleles = [normalize_mhc_name(alleles)] * n_peptides
+        else:
+            alleles = [
+                (normalize_mhc_name(allele) if allele  else None)
+                for allele in alleles
+            ]
 
         if n_peptides != len(alleles):
             raise ValueError(
                 "Length mismatch between peptides (%d) and alleles (%d)" % (
                     n_peptides,
                     len(alleles)))
-
-        if isinstance(alleles, string_types):
-            alleles = [normalize_mhc_name(alleles)] * n_peptides
-        else:
-            alleles = normalize_mhc_names(alleles)
 
         if labels is None:
             # if labels are not given then assume that the dataset is
@@ -55,25 +79,9 @@ class Dataset(object):
         else:
             labels = np.array(labels, dtype="bool")
 
-        if group_ids is None:
-            # if sequence groups aren't given then put every
-            # peptide in a singleton group
-            group_ids = np.arange(n_peptides, dtype="int32")
-        elif isinstance(group_ids, (float, int, bool)):
-            group_ids = np.array([group_ids] * n_peptides, dtype="int32")
-        elif n_peptides != len(group_ids):
-            raise ValueError(
-                "Length mismatch between peptides (%d) and groups (%d)" % (
-                    n_peptides,
-                    len(group_ids)))
-        else:
-            group_ids = np.array(group_ids, dtype="int32")
-
         if weights is None:
             # if weights aren't given then every element has the same
             # weight
-            # TODO: use group_ids and labels to weigh samples inversely with
-            # group size (separately for positive vs. negative labels)
             weights = np.ones(n_peptides, dtype="float32")
         elif isinstance(weights, (float, int)):
             weights = np.array([weights] * n_peptides, dtype="float32")
@@ -81,42 +89,98 @@ class Dataset(object):
             raise ValueError(
                 "Length mismatch between peptides (%d) and weights (%d)" % (
                     n_peptides,
-                    len(labels)))
+                    len(weights)))
         else:
             weights = np.array(weights, dtype="float32")
 
-        return alleles, peptides, labels, weights, group_ids
+        if contigs is None:
+            contigs = peptides
+        elif len(contigs) != len(peptides):
+            raise ValueError("Expected %d contigs but got %d" % (
+                len(peptides),
+                len(contigs)))
 
-    def __init__(self, alleles, peptides, labels=None, weights=None, group_ids=None):
-        alleles, peptides, labels, weights, group_ids = \
-            self._validate_and_normalize(
+        if binding_cores is None:
+            binding_cores = peptides
+        elif len(binding_cores) != len(peptides):
+            raise ValueError("Expected %d binding cores but got %d" % (
+                len(peptides),
+                len(binding_cores)))
+        rows = []
+        for a, p, l, w, contig, core in zip(
+                alleles,
+                peptides,
+                labels,
+                weights,
+                contigs,
+                binding_cores):
+            rows.append(DatasetRow(
+                allele=a,
+                peptide=p,
+                label=l,
+                weight=w,
+                contig=contig,
+                binding_core=core))
+        return rows
+
+    def __init__(
+            self,
+            alleles=None,
+            peptides=[],
+            labels=None,
+            weights=None,
+            contigs=None,
+            binding_cores=None,
+            extra_rows=[]):
+        self.rows = self._validate_and_normalize(
                 alleles=alleles,
                 peptides=peptides,
                 labels=labels,
                 weights=weights,
-                group_ids=group_ids)
-        self.alleles = alleles
-        self.peptides = peptides
-        self.labels = labels
-        self.weights = weights
-        self.group_ids = group_ids
+                contigs=contigs,
+                binding_cores=binding_cores)
+        self.rows.extend(extra_rows)
+
+    @classmethod
+    def from_rows(cls, rows):
+        return Dataset(extra_rows=rows)
+
+    @property
+    def peptides(self):
+        return [row.peptide for row in self.rows]
+
+    @property
+    def alleles(self):
+        return [row.allele for row in self.rows]
+
+    @property
+    def labels(self):
+        return np.array([row.label for row in self.rows])
+
+    @property
+    def weights(self):
+        return np.array([row.weight for row in self.rows])
+
+    @property
+    def contigs(self):
+        return [row.contig for row in self.rows]
+
+    @property
+    def binding_cores(self):
+        return [row.binding_core for row in self.rows]
 
     def __len__(self):
-        return len(self.peptides)
+        return len(self.rows)
 
     def __eq__(self, other):
         if self.__class__ != other.__class__:
             return False
         if len(self) != len(other):
             return False
-        other_dict = other.to_dict()
-        for (column_name, values) in self.to_dict().items():
-            other_values = other_dict[column_name]
-            for (x, y) in zip(values, other_values):
-                if x != y:
-                    print(x, y)
-                    return False
-        return True
+        return all([
+            ri == rj
+            for (ri, rj)
+            in zip(self.rows, other.rows)])
 
     def __ne__(self, other):
         return not (self == other)
@@ -129,25 +193,15 @@ class Dataset(object):
 
     def __getitem__(self, indices):
         if isinstance(indices, slice):
-            peptides = self.peptides[:indices]
-            alleles = self.alleles[:indices]
-            # for other fields we want to pull out the indices
-            # implied by a slice
-            index_array = np.arange(*indices.indices(len(self)))
+            new_rows = self.rows[indices]
         else:
             index_array = np.array(indices)
             if index_array.dtype == "bool":
                 # replace boolean mask with indices of True entries
                 index_array = np.where(index_array)[0]
-            peptides = [self.peptides[i] for i in index_array]
-            alleles = [self.alleles[i] for i in index_array]
+            new_rows = [self.rows[i] for i in index_array]
 
-        return Dataset(
-            alleles=alleles,
-            peptides=peptides,
-            labels=self.labels[index_array],
-            weights=self.weights[index_array],
-            group_ids=self.group_ids[index_array])
+        return Dataset.from_rows(new_rows)
 
     @classmethod
     def _check_type(cls, maybe_dataset):
@@ -157,7 +211,7 @@ class Dataset(object):
 
     @classmethod
     def make_empty(cls):
-        return cls(alleles=[], peptides=[], labels=[], weights=[], group_ids=[])
+        return cls.from_rows([])
 
     def split(self, train_idx, test_idx):
         dataset_train = self[train_idx]
@@ -185,55 +239,24 @@ class Dataset(object):
         assert len(right) == 0
         return left
 
-    def distinct_sequence_groups(self):
-        return set(self.group_ids)
+    def unique_contigs(self):
+        return set(self.contigs)
 
-    def distinct_alleles(self):
+    def unique_alleles(self):
         return set(self.alleles)
 
-    def distinct_peptides(self):
+    def unique_peptides(self):
         return set(self.peptides)
 
-    def groupby_allele(self):
-        for allele in self.distinct_alleles():
-            mask = [a_i == allele for a_i in self.alleles]
-            yield (allele, self[mask])
-
-    def groupby_peptide(self):
-        for peptide in self.distinct_peptides():
-            mask = [p_i == peptide for p_i in self.peptides]
-            yield (peptide, self[mask])
-
-    def max_group_id(self):
-        if len(self) > 0:
-            return
-        else:
-            return -1
-
-    def combine(self, other, preserve_group_ids=False):
+    def combine(self, other):
         self._check_type(other)
-        peptides = list(self.peptides) + list(other.peptides)
-        alleles = list(self.alleles) + list(other.alleles)
-        labels = np.concatenate([self.labels, other.labels])
-        weights = np.concatenate([self.weights, other.weights])
-        if not preserve_group_ids and len(self) > 0:
-            offset = self.group_ids.max() + 1
-            other_group_ids = offset + other.group_ids
-        else:
-            other_group_ids = other.group_ids
-        group_ids = np.concatenate([self.group_ids, other_group_ids])
-        return Dataset(
-            alleles=alleles,
-            peptides=peptides,
-            labels=labels,
-            weights=weights,
-            group_ids=group_ids)
+        return self.from_rows(self.rows + other.rows)
 
     @classmethod
-    def concat(cls, datasets, preserve_group_ids=False):
+    def concat(cls, datasets):
         combined = cls.make_empty()
         for dataset in datasets:
-            combined = combined.combine(dataset, preserve_group_ids=preserve_group_ids)
+            combined = combined.combine(dataset)
         return combined
 
     def to_dict(self):
@@ -242,7 +265,8 @@ class Dataset(object):
             ("allele", self.alleles),
             ("label", self.labels),
             ("weight", self.weights),
-            ("group_id", self.group_ids)
+            ("contig", self.contigs),
+            ("binding_core", self.binding_cores),
         ])
 
     def to_dataframe(self):
@@ -255,7 +279,8 @@ class Dataset(object):
         alleles = None
         labels = None
         weights = None
-        group_ids = None
+        contigs = None
+        binding_cores = None
 
         for name in ["peptide", "peptides", "sequence", "sequences", "seq", "seqs"]:
             if name in col_names:
@@ -284,9 +309,16 @@ class Dataset(object):
                 weights = np.array(df[name])
                 break
 
-        for name in ["group_id", "group_ids", "group", "groups"]:
+        for name in ["binding_core", "binding_cores", "core", "cores"]:
             if name in col_names:
-                group_ids = np.array(df[name])
+                binding_cores = df[name]
+                break
+
+        for name in [
+                "contig", "contigs", "group_contig", "group_contigs",
+                "group", "groups"]:
+            if name in col_names:
+                contigs = df[name]
                 break
 
         return Dataset(
@@ -294,7 +326,8 @@ class Dataset(object):
             peptides=peptides,
             labels=labels,
             weights=weights,
-            group_ids=group_ids)
+            binding_cores=binding_cores,
+            contigs=contigs)
 
     def to_csv(self, filename):
         self.to_dataframe().to_csv(filename, index=False)
@@ -327,3 +360,171 @@ class Dataset(object):
             ]
         return cls.from_allele_dict(
             allele_to_peptides_dict, label=label)
+
+    @classmethod
+    def from_peptides_text_file(cls, filename, label=True):
+        return cls.from_peptides_text_files([filename], label=label)
+
+    @classmethod
+    def from_peptides_text_files(cls, filenames, label=True):
+        allele_to_peptides_dict = load_allele_to_peptides_dict(filenames)
+        datasets = []
+        for allele, peptides in allele_to_peptides_dict.items():
+            datasets.append(Dataset(alleles=allele, labels=label, peptides=peptides))
+        return cls.concat(datasets)
+
+    def groupby_allele_dict(self):
+        allele_to_rows = defaultdict(list)
+        for row in self.rows:
+            allele_to_rows[row.allele].append(row)
+        return {
+            allele: Dataset.from_rows(rows)
+            for (allele, rows)
+            in allele_to_rows.items()
+        }
+
+    def groupby_allele(self):
+        for allele, dataset in self.groupby_allele_dict().items():
+            yield allele, dataset
+
+    def groupby_peptide(self):
+        for peptide in sorted(self.unique_peptides(), key=lambda p: (len(p), p)):
+            mask = [p_i == peptide for p_i in self.peptides]
+            yield (peptide, self[mask])
+
+    def group_peptides_by_allele_and_contig_dict(self):
+        result = defaultdict(list)
+        for (peptide, allele, contig) in zip(self.peptides, self.alleles, self.contigs):
+            result[(allele, contig)].append(peptide)
+        return result
+
+    def group_peptides_by_allele_and_contig(self):
+        for (allele, contig), peptides in self.group_peptides_by_allele_and_contig_dict():
+            yield (allele, contig), peptides
+
+    def group_rows_by_contig_dict(self):
+        result = defaultdict(list)
+        for row in self.rows:
+            result[row.contig].append(row)
+        return result
+
+    def group_rows_by_contig(self):
+        for contig, rows in self.group_rows_by_contig_dict().items():
+            yield contig, rows
+
+    def group_rows_by_allele_and_label_dict(self):
+        row_groups =  defaultdict(list)
+        for row in self.rows:
+            key = (row.allele, row.label)
+            row_groups[key].append(row)
+        return row_groups
+
+    def group_rows_by_allele_and_label(self):
+        for (key, rows) in self.group_rows_by_allele_and_label_dict().items():
+            yield key, rows
+
+    def group_by_allele_and_label_dict(self):
+        return {
+            key: Dataset.from_rows(rows)
+            for (key, rows) in self.group_rows_by_allele_and_label()
+        }
+
+    def group_by_allele_and_label(self):
+        for key, dataset in self.group_by_allele_and_label_dict().items():
+            yield key, dataset
+
+    def group_peptides_by_allele_and_label_dict(self):
+        return {
+            key: [row.peptide for row in rows]
+            for (key, rows) in self.group_rows_by_allele_and_label()
+        }
+
+    def group_peptides_by_allele_and_label(self):
+        for key, peptides in self.group_peptides_by_allele_and_label_dict().items():
+            yield key, peptides
+
+    def allele_and_contig_pairs_to_unique_ids(self):
+        d = self.group_peptides_by_allele_and_contig_dict()
+        return {key: i for i, key in enumerate(d.keys())}
+
+    @property
+    def group_ids(self):
+        """
+        Returns list of group_ids of same length as peptides
+        """
+        if hasattr(self, '_group_ids'):
+            return self._group_ids
+        d = self.allele_and_contig_pairs_to_unique_ids()
+        return [
+            d[(allele, contig)]
+            for (allele, contig)
+            in zip(self.alleles, self.contigs)
+        ]
+
+    def assemble_contigs(self):
+        """
+        Ignoring group contigs and use overlap assembly to construct
+        longer sequences containing peptides for each allele.
+        """
+        datasets = []
+        for (allele, label), peptides in self.group_peptides_by_allele_and_label():
+            sequence_groups = assemble_into_sequence_groups(peptides)
+            datasets.append(Dataset.from_sequence_groups(
+                sequence_groups, allele=allele, label=label))
+        return Dataset.concat(datasets)
+
+    @classmethod
+    def from_sequence_groups(
+            cls,
+            sequence_groups,
+            allele=None,
+            label=True):
+        """
+        Create flattened Dataset from list of SequenceGroup objects
+        """
+        rows = []
+
+        def sort_by_increasing_len(s):
+            return len(s)
+
+        for group in sequence_groups:
+            binding_cores = group.binding_cores
+            if len(binding_cores) > 1:
+                binding_cores = sorted(binding_cores, key=sort_by_increasing_len)
+            for c in sorted(group.children, key=lambda x: (len(x), x)):
+                binding_core = None
+                for seq in group.binding_cores:
+                    if seq in c:
+                        binding_core = seq
+                        break
+                row = DatasetRow(
+                    allele=allele,
+                    peptide=c,
+                    contig=group.contig,
+                    binding_core=binding_core,
+                    label=True,
+                    weight=1.0 / len(group.children))
+                rows.append(row)
+        return cls.from_rows(rows)
+
+    def to_sequence_groups(self):
+        """
+        Returns list of SequenceGroup objects, throws away
+        weight, allele, and label for each row.
+        """
+        sequence_groups = []
+        for (contig, rows) in self.group_rows_by_contig():
+            children = [r.peptide for r in rows]
+            binding_cores = {r.binding_core for r in rows if r.binding_core}
+            # leaf sequences aren't contained in other peptides
+            leaves = {
+                seq for seq in children
+                if sum(seq in other_seq for other_seq in children) == 1
+            }
+            sequence_groups.append(
+                SequenceGroup(
+                    contig=contig,
+                    children=children,
+                    leaves=leaves,
+                    binding_cores=binding_cores))
+        return sequence_groups

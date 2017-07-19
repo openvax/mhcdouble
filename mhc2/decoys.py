@@ -15,6 +15,7 @@ from collections import Counter
 from pyensembl import ensembl_grch38
 
 from .dataset import Dataset
+from .sequence_group import SequenceGroup
 
 class PeptideGenerator(object):
     _genome_to_sequence = {}
@@ -136,18 +137,18 @@ def generate_independent_decoy_list_from_proteome(
 
 def augment_dataset_with_decoys(
         hit_dataset,
-        decoy_multiple,
+        decoys_per_hit,
         min_decoy_length=None,
         max_decoy_length=None):
     n_hits = len(hit_dataset)
+    n_decoys = int(n_hits * decoys_per_hit)
     decoy_peptides = generate_independent_decoy_list_from_proteome(
-        hit_dataset.peptides,
-        factor=decoy_multiple,
+        n_decoys=n_decoys,
+        positive_peptides=hit_dataset.peptides,
         min_length=min_decoy_length,
         max_length=max_decoy_length)
 
-    n_decoys = len(decoy_peptides)
-    assert n_decoys == int(n_hits * decoy_multiple)
+    assert n_decoys == len(decoy_peptides)
     decoy_mhc_alleles = list(np.random.choice(hit_dataset.alleles, size=n_decoys))
 
     sum_hit_weights = hit_dataset.weights.sum()
@@ -159,3 +160,77 @@ def augment_dataset_with_decoys(
         labels=0,
         weights=decoy_weight)
     return hit_dataset.combine(decoy_dataset, preserve_group_ids=False)
+
+def generate_decoy_sequence_groups(
+            n_decoy_loci,
+            min_decoys_per_locus=1,
+            max_decoys_per_locus=10,
+            binding_core_length=9,
+            contig_length=45,
+            exclude_subsequences=set([])):
+    if exclude_subsequences:
+        n_decoy_loci_with_extra = int(1.2 * n_decoy_loci)
+    else:
+        n_decoy_loci_with_extra = n_decoy_loci
+
+    sequence_groups = []
+    contigs = generate_independent_decoy_list_from_proteome(
+        n_decoys=n_decoy_loci_with_extra,
+        min_length=contig_length,
+        max_length=contig_length)
+    half_idx = contig_length // 2
+
+    max_decoys = int(np.ceil(n_decoy_loci_with_extra * max_decoys_per_locus))
+    start_indices = np.random.randint(
+        low=0,
+        high=half_idx,
+        size=max_decoys)
+    end_indices = np.random.randint(
+        low=half_idx + binding_core_length,
+        high=contig_length,
+        size=max_decoys)
+    offset = 0
+    count_per_locus = np.random.randint(
+        low=min_decoys_per_locus,
+        high=max_decoys_per_locus + 1,
+        size=n_decoy_loci_with_extra)
+    for i, contig in enumerate(contigs):
+        binding_core = contig[half_idx:half_idx + binding_core_length]
+        n_peptides = count_per_locus[i]
+        children = []
+        for _ in range(n_peptides):
+            start = start_indices[offset]
+            end = end_indices[offset]
+            children.append(contig[start:end])
+            offset += 1
+
+        sequence_groups.append(SequenceGroup(
+            contig=contig,
+            binding_cores=[binding_core],
+            leaves=[binding_core],
+            children=set(children)))
+    if exclude_subsequences:
+        new_sequence_groups = []
+        kmer_sizes = {len(exclude) for exclude in exclude_subsequences}
+
+        for i, g in enumerate(sequence_groups):
+            contig = g.contig
+            kmers = set([])
+            for k in kmer_sizes:
+                kmers.update([
+                    contig[i:i + k] for i in range(len(contig) - k + 1)])
+            if any([kmer in exclude_subsequences for kmer in kmers]):
+                continue
+            new_sequence_groups.append(g)
+        n_filtered_sequence_groups = len(new_sequence_groups)
+        n_dropped = len(sequence_groups) - n_filtered_sequence_groups
+        if n_dropped > 0:
+            print("-- Dropped %d/%d decoy sequence groups" % (
+                n_dropped,
+                len(sequence_groups)))
+        sequence_groups = new_sequence_groups
+
+    if len(sequence_groups) > n_decoy_loci:
+        sequence_groups = sequence_groups[:n_decoy_loci]
+    return sequence_groups
+

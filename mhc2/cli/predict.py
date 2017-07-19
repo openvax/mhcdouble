@@ -16,6 +16,7 @@ import pandas as pd
 
 from .common import parse_args
 from ..model_collection import ModelCollection
+from ..peptides import filter_peptides, load_peptides_list
 
 parser = ArgumentParser(description="Predict peptide-MHC Class II binding")
 
@@ -48,34 +49,6 @@ parser.add_argument(
     "--output",
     help="Name of CSV file which will contain results.")
 
-def filter_peptides(peptides, to_upper=True):
-    """
-    Strip and uppercase peptides (if necessary) and drop any
-    empty sequences.
-    """
-    new_peptides = []
-    for peptide in peptides:
-        peptide = peptide.strip()
-        if to_upper:
-            peptide = peptide.upper()
-        if not peptide:
-            continue
-        else:
-            new_peptides.append(peptide)
-    return new_peptides
-
-
-def load_peptides_list(path, to_upper=True):
-    peptides = []
-    with open(path) as f:
-        for line in f:
-            if f.startswith("#"):
-                continue
-            line = line.strip()
-            if not line:
-                continue
-            peptides.append(line.split()[0])
-    return filter_peptides(peptides, to_upper=to_upper)
 
 def main(args_list=None):
     args = parse_args(parser, args_list)

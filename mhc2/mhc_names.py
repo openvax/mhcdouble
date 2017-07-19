@@ -12,6 +12,8 @@
 
 from collections import defaultdict
 
+from .common import split_by_multiple_seps
+
 # source: wikipedia article on HLA-DQ
 dq_allele_freq_table = """
 05:01   02:01   13.16
@@ -78,7 +80,7 @@ dq_alpha_to_beta = {
 def normalize_mhc_name(name):
     if len(name) == 7 and name.startswith("DRB"):
         name = "DRB1" + name[3:]
-    if not name.startswith("HLA"):
+    if name[:2] != "H2" and name[:3] not in {"HLA", "H-2"}:
         name = "HLA-" + name
     name = name.replace("_", "")
     name = name.replace(":", "")
@@ -136,4 +138,13 @@ def normalize_mhc_names(alleles):
             results[i] = allele
     return results
 
-
+def parse_allele_from_filename(
+        filename,
+        seps=["-", "_"],
+        allele_prefixes=["DR", "DQ", "DP"]):
+    parts = split_by_multiple_seps(filename, seps)
+    for part in parts:
+        for prefix in allele_prefixes:
+            if part.startswith(prefix):
+                return part
+    return None

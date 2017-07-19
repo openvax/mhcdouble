@@ -10,6 +10,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import logging
+import csv
 from collections import defaultdict
 from sklearn.model_selection import GroupKFold
 from sklearn.metrics import roc_auc_score
@@ -27,7 +29,7 @@ def train_predictors_for_allele(
         csv_writer=None):
     dataset = dataset.shuffle()
     outer_cv = GroupKFold(n_splits=n_cv_splits)
-    inner_cv = GroupKFold(n_splits=2)
+    # inner_cv = GroupKFold(n_splits=2)
     allele = list(set(dataset.alleles))[0]
 
     for outer_fold_idx, (train_idx, test_idx) in enumerate(outer_cv.split(
@@ -46,7 +48,7 @@ def train_predictors_for_allele(
             csv_row = {
                 "allele": allele,
                 "outer_fold": outer_fold_idx,
-                "inner_fold": inner_fold_idx,
+                # "inner_fold": inner_fold_idx,
                 "n_train": n_train,
                 "n_train_pos": n_train_pos,
                 "n_test": n_test,
@@ -110,7 +112,7 @@ def train_allele_to_ensemble_dict(
         csv_writer = csv.DictWriter(f, fieldnames=[
             "allele",
             "outer_fold",
-            "inner_fold",
+            # "inner_fold",
             "auc",
             "n_train",
             "n_train_pos",

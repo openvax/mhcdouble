@@ -74,10 +74,14 @@ if __name__ == '__main__':
         entry_points={
             'console_scripts': [
                 'mhc2-predict=mhc2.cli.predict:main',
-                'mhc2-train=mhc2.cli.train:main',
-                'mhc2-group-nested-seqs=mhc2.cli.group_nested_seqs:main',
+                'mhc2-train-convolutional=mhc2.cli.train:main',
+                'mhc2-assembly=mhc2.cli.assembly:main',
+                'mhc2-binding-cores=mhc2.cli.binding_cores:main',
                 'mhc2-generate-decoys=mhc2.cli.generate_decoys:main',
+                'mhc2-generate-nested-decoys=mhc2.cli.generate_nested_decoys:main',
                 'mhc2-list-alleles=mhc2.cli.list_alleles:main',
+                'mhc2-train-fixed-length=mhc2.cli.train_fixed_length:main',
+                'mhc2-predict-netmhciipan=mhc2.cli.predict_netmhciipan:main',
             ]
         }
     )
