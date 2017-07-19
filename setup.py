@@ -68,6 +68,8 @@ if __name__ == '__main__':
             'numpy',
             'pandas',
             'ujson',
+            'scikit-learn',
+            'pepnet',
         ],
         long_description=readme,
         packages=find_packages(exclude="test"),

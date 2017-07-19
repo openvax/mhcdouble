@@ -4,10 +4,9 @@ from sklearn.metrics import roc_auc_score
 from pepnet import Predictor, SequenceInput, Output
 import numpy as np
 
-MAX_PEPTIDE_LENGTH = 30
-
-FIRST_CONV_SIZES = {9: 32} # {1: 4, 3: 4, 8: 4, 9: 16, 10: 4}
-SECOND_CONV_SIZES = {9: 32} # {1: 8, 5: 8, 9: 8}
+MAX_PEPTIDE_LENGTH = 35
+FIRST_CONV_SIZES = {3: 16, 9: 16} # {1: 4, 3: 4, 8: 4, 9: 16, 10: 4}
+SECOND_CONV_SIZES = {3: 16, 9: 16} # {1: 8, 5: 8, 9: 8}
 CONV_DROPOUT = 0 # 0.25
 CONV_ACTIVATION = "relu"
 DENSE_DROPOUT = 0.25 # 0.25
@@ -21,7 +20,7 @@ BATCH_SIZE = 32
 class ConvolutionalPredictor(object):
     def __init__(
             self,
-            max_peptide_length=30,
+            max_peptide_length=MAX_PEPTIDE_LENGTH,
             embedding_dim=EMBEDDING_DIM,
             conv_filter_sizes=[FIRST_CONV_SIZES, SECOND_CONV_SIZES],
             conv_dropout=CONV_DROPOUT,
