@@ -4,6 +4,8 @@ from sklearn.metrics import roc_auc_score
 from pepnet import Predictor, SequenceInput, Output
 import numpy as np
 
+from .dataset import Dataset
+
 MAX_PEPTIDE_LENGTH = 35
 FIRST_CONV_SIZES = {9: 32}
 SECOND_CONV_SIZES = {9: 32}
@@ -185,6 +187,19 @@ class ConvolutionalPredictor(object):
             weight = self._train(model, train_dataset=train_dataset, test_dataset=test_dataset)
             self.models.append(model)
             self.model_weights.append(weight)
+        return self
+
+    def fit(self, peptides, labels, weights=None, contigs=None):
+        dataset = Dataset(
+            peptides=peptides,
+            labels=labels,
+            weights=weights,
+            contigs=contigs)
+        return self.fit_dataset(dataset)
+
+    def fit_predict(self, peptides, labels, weights=None, contigs=None):
+        self.fit(peptides=peptides, labels=labels, weights=weights, contigs=contigs)
+        return self.predict_peptides(peptides)
 
     def predict_peptides(self, peptides):
         assert len(self.models) > 0

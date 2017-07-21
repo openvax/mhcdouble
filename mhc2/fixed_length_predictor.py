@@ -52,7 +52,7 @@ class FixedLengthPredictor(object):
         self.n_models = n_models
         self.lr_penalty =lr_penalty
         self.lr_solver = lr_solver
-        self.combine_predictions_fn
+        self.combine_predictions_fn = combine_predictions_fn
 
     def _make_binding_core_predictor(self, max_binding_core_iters=None):
         if not max_binding_core_iters:
