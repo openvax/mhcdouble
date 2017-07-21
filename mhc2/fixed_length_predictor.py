@@ -16,7 +16,7 @@ from pepnet import Predictor, NumericInput, Output
 from sklearn.linear_model import LogisticRegressionCV
 from sklearn.model_selection import KFold
 from .binding_core_predictor import BindingCorePredictor
-from .common import groupby, groupby_average_array, groupby_max_array
+from .common import groupby, groupby_average_array, groupby_array_fn
 from .assembly import assemble_into_sequence_groups
 from .decoys import generate_decoy_sequence_groups
 from .dataset import Dataset
@@ -36,7 +36,8 @@ class FixedLengthPredictor(object):
             epochs=20,
             n_models=2,
             lr_penalty="l2",
-            lr_solver="lbfgs"):
+            lr_solver="liblinear",
+            combine_predictions_fn=np.max):
         self.binding_core_size = binding_core_size
         self.binding_core_predictors = []
         self.n_model = n_models
@@ -51,6 +52,7 @@ class FixedLengthPredictor(object):
         self.n_models = n_models
         self.lr_penalty =lr_penalty
         self.lr_solver = lr_solver
+        self.combine_predictions_fn
 
     def _make_binding_core_predictor(self, max_binding_core_iters=None):
         if not max_binding_core_iters:
@@ -385,6 +387,7 @@ class FixedLengthPredictor(object):
     def predict(self, sequences):
         n = len(sequences)
         y_pred_sum = np.zeros(n)
+        combine_fn = self.combine_predictions_fn
         for binding_core_predictor, model in zip(
                 self.binding_core_predictors, self.models):
             X, _, weights, original_indices = self._encode(
@@ -394,10 +397,11 @@ class FixedLengthPredictor(object):
             y_pred_multiple_binding_cores = self._predict_model_scores(X, model)
             # group predictions from multiple binding cores back to
             # their originating sequence
-            y_pred_grouped = groupby_max_array(
+            y_pred_grouped = groupby_array_fn(
                 y_pred_multiple_binding_cores,
                 indices=original_indices,
-                size=n)
+                size=n,
+                fn=combine_fn)
             y_pred_sum += y_pred_grouped
         y_pred_avg = y_pred_sum / self.n_models
         return y_pred_avg
