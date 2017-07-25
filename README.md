@@ -1,4 +1,4 @@
-# MHCdouble
+# MHCdouble [![Build Status](https://travis-ci.org/hammerlab/mhcdouble.svg?branch=master)](https://travis-ci.org/hammerlab/mhcdouble)
 
 Predicting presentation of peptides by Class II MHC molecules using convolutional neural networks.
 
