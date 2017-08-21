@@ -20,5 +20,6 @@ def test_generate_decoy_sequence_groups():
         max_decoys_per_locus=3)
     eq_(len(groups), 10)
     for group in groups:
+        print(group)
         eq_(len(group.children), 3)
         eq_(len(group.binding_cores), 1)

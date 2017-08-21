@@ -1,6 +1,5 @@
 import logging
 from sklearn.model_selection import GroupKFold
-from sklearn.metrics import roc_auc_score
 from pepnet import Predictor, SequenceInput, Output
 import numpy as np
 
@@ -26,7 +25,7 @@ class ConvolutionalPredictor(object):
             embedding_dim=EMBEDDING_DIM,
             conv_filter_sizes=[FIRST_CONV_SIZES, SECOND_CONV_SIZES],
             conv_dropout=CONV_DROPOUT,
-            conv_activation="relu",
+            conv_activation=CONV_ACTIVATION,
             global_pooling_batch_normalization=GLOBAL_BATCH_NORMALIZATION,
             dense_layer_sizes=DENSE_LAYER_SIZES,
             dense_dropout=DENSE_DROPOUT,
@@ -125,14 +124,18 @@ class ConvolutionalPredictor(object):
                 dense_activation=self.dense_activation,
                 dense_dropout=self.dense_dropout))
 
-    def _train(self, model, train_dataset, test_dataset):
+    def _train(self, model, train_dataset, test_dataset, y_transform_fn=None):
         epochs_since_improvement = 0
-        last_best_auc = 0
+        last_best_mse = np.inf
         last_best_model_params = None
         train_peptides, train_labels, train_weights, _ = \
             self._expand_dataset_for_long_peptides(train_dataset)
         test_peptides, test_labels, test_weights, _ = \
                 self._expand_dataset_for_long_peptides(test_dataset)
+
+        if y_transform_fn:
+            train_labels = y_transform_fn(train_labels)
+            test_labels = y_transform_fn(test_labels)
 
         for epoch in range(self.max_training_epochs):
 
@@ -143,19 +146,18 @@ class ConvolutionalPredictor(object):
                 batch_size=self.batch_size,
                 epochs=1)
             test_pred = model.predict({"peptide": test_peptides})
-            test_auc = roc_auc_score(
-                y_true=test_labels,
-                y_score=test_pred,
-                sample_weight=test_weights)
-            if test_auc > last_best_auc:
+            test_mse = ((test_pred - test_labels) ** 2).mean()
+            test_mae = np.median(np.abs(test_pred - test_labels))
+            if test_mse < last_best_mse:
                 epochs_since_improvement = 0
-                last_best_auc = test_auc
+                last_best_mse = test_mse
                 last_best_model_params = model.get_weights()
             else:
                 epochs_since_improvement += 1
-            print("[Convolutional] -- epoch %d: test AUC = %0.4f%s" % (
+            print("[Convolutional] -- epoch %d: test MAE = %f MSE = %f%s" % (
                 epoch + 1,
-                test_auc,
+                test_mae,
+                test_mse,
                 " (*)" if epochs_since_improvement == 0 else ""))
             if epochs_since_improvement >= self.training_patience:
                 break
@@ -163,14 +165,12 @@ class ConvolutionalPredictor(object):
             logging.warn("Best weights = None!")
         else:
             model.set_weights(last_best_model_params)
-        rescaled_auc = max(0, (2 * (last_best_auc - 0.5))) ** 2
-        return rescaled_auc
+
 
     def _clear_models(self):
         self.models = []
-        self.model_weights = []
 
-    def fit_dataset(self, dataset):
+    def fit_dataset(self, dataset, y_transform_fn=None):
         assert len(dataset.unique_alleles()) == 1, \
             "Can only train one allele at a time"
         self._clear_models()
@@ -184,18 +184,21 @@ class ConvolutionalPredictor(object):
             train_dataset = dataset[train_idx]
             test_dataset = dataset[test_idx]
             model = self._make_model()
-            weight = self._train(model, train_dataset=train_dataset, test_dataset=test_dataset)
+            self._train(
+                model,
+                train_dataset=train_dataset,
+                test_dataset=test_dataset,
+                y_transform_fn=y_transform_fn)
             self.models.append(model)
-            self.model_weights.append(weight)
         return self
 
-    def fit(self, peptides, labels, weights=None, contigs=None):
+    def fit(self, peptides, labels, weights=None, contigs=None, y_transform_fn=None):
         dataset = Dataset(
             peptides=peptides,
             labels=labels,
             weights=weights,
             contigs=contigs)
-        return self.fit_dataset(dataset)
+        return self.fit_dataset(dataset, y_transform_fn=y_transform_fn)
 
     def fit_predict(self, peptides, labels, weights=None, contigs=None):
         self.fit(peptides=peptides, labels=labels, weights=weights, contigs=contigs)
@@ -203,7 +206,6 @@ class ConvolutionalPredictor(object):
 
     def predict_peptides(self, peptides):
         assert len(self.models) > 0
-        assert len(self.models) == len(self.model_weights)
 
         scores = np.zeros(len(peptides), dtype="float64")
         weights = np.zeros(len(peptides), dtype="float64")
@@ -211,9 +213,9 @@ class ConvolutionalPredictor(object):
 
         assert len(extended_peptides) == len(extended_peptide_indices)
         assert len(extended_peptides) >= len(peptides)
-        for model, weight in zip(self.models, self.model_weights):
-            extended_scores = model.predict(extended_peptides) * weight
+        for model in self.models:
+            extended_scores = model.predict(extended_peptides)
             for i, x in zip(extended_peptide_indices, extended_scores):
                 scores[i] += x
-                weights[i] += weight
+                weights[i] += 1.0  # TODO: model weights
         return scores / weights

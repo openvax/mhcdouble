@@ -11,26 +11,18 @@
 # limitations under the License.
 
 import math
-from collections import OrderedDict, defaultdict
+from collections import OrderedDict, defaultdict, Counter
 from serializable import Serializable
 
-from six import string_types
+from six import string_types, integer_types
 import numpy as np
 import pandas as pd
+from mhcnames import normalize_allele_name
 
-from .mhc_names import normalize_mhc_name
 from .sequence_group import SequenceGroup
 from .assembly import assemble_into_sequence_groups
 from .peptides import load_allele_to_peptides_dict
 
-class DatasetRow(Serializable):
-    def __init__(self, allele, peptide, label, weight, contig, binding_core):
-        self.allele = allele
-        self.peptide = peptide
-        self.label = label
-        self.weight = weight
-        self.contig = contig
-        self.binding_core = binding_core
 
 class Dataset(Serializable):
     """
@@ -43,7 +35,15 @@ class Dataset(Serializable):
             labels,
             weights,
             contigs,
-            binding_cores):
+            binding_cores,
+            extra_columns):
+        """
+        Given list or array values for the four core fields
+        (allele, peptide, label, weight), as well as a dictionary
+        of extra columns, checks to make sure that values are of
+        correct types and lengths and then returns a DataFrame
+        of normalized values.
+        """
         if isinstance(peptides, string_types):
             peptides = [peptides]
 
@@ -52,12 +52,13 @@ class Dataset(Serializable):
         if alleles is None:
             alleles = [None] * n_peptides
         elif isinstance(alleles, string_types):
-            alleles = [normalize_mhc_name(alleles)] * n_peptides
+            alleles = [normalize_allele_name(alleles)] * n_peptides
         else:
             alleles = [
-                (normalize_mhc_name(allele) if allele  else None)
+                (normalize_allele_name(allele) if allele  else None)
                 for allele in alleles
             ]
+
 
         if n_peptides != len(alleles):
             raise ValueError(
@@ -70,14 +71,14 @@ class Dataset(Serializable):
             # comprised of "hits"
             labels = np.ones(n_peptides, dtype="bool")
         elif isinstance(labels, (float, int, bool)):
-            labels = np.array([labels] * n_peptides, dtype="bool")
+            labels = np.array([labels] * n_peptides)
         elif n_peptides != len(labels):
             raise ValueError(
                 "Length mismatch between peptides (%d) and labels (%d)" % (
                     n_peptides,
                     len(labels)))
         else:
-            labels = np.array(labels, dtype="bool")
+            labels = np.array(labels)
 
         if weights is None:
             # if weights aren't given then every element has the same
@@ -95,33 +96,43 @@ class Dataset(Serializable):
 
         if contigs is None:
             contigs = peptides
-        elif len(contigs) != len(peptides):
-            raise ValueError("Expected %d contigs but got %d" % (
-                len(peptides),
-                len(contigs)))
+        elif len(contigs) != n_peptides:
+            raise ValueError("Expected %d contigs but got %d" % (len(contigs), n_peptides))
 
         if binding_cores is None:
-            binding_cores = peptides
-        elif len(binding_cores) != len(peptides):
+            binding_cores = contigs
+        elif len(binding_cores) != n_peptides:
             raise ValueError("Expected %d binding cores but got %d" % (
-                len(peptides),
-                len(binding_cores)))
-        rows = []
-        for a, p, l, w, contig, core in zip(
-                alleles,
-                peptides,
-                labels,
-                weights,
-                contigs,
-                binding_cores):
-            rows.append(DatasetRow(
-                allele=a,
-                peptide=p,
-                label=l,
-                weight=w,
-                contig=contig,
-                binding_core=core))
-        return rows
+                len(binding_cores), n_peptides))
+
+        result_dict = OrderedDict([])
+        result_dict["allele"] = alleles
+        result_dict["peptide"] = peptides
+        result_dict["label"] = labels
+        result_dict["weight"] = weights
+        result_dict["contig"] = contigs
+        result_dict["binding_core"] = binding_cores
+
+        if extra_columns is None:
+            extra_columns = {}
+        else:
+            assert isinstance(extra_columns, dict)
+            extra_columns = extra_columns.copy()
+
+        for (name, values) in extra_columns.items():
+            scalar_types = integer_types + string_types + (bool, float)
+            if isinstance(values, scalar_types):
+                values = [values] * n_peptides
+            elif values is None:
+                values = [None] * n_peptides
+            elif len(values) != n_peptides:
+                raise ValueError(
+                    "Expected %d values for feature '%s' but got %d" % (
+                        n_peptides,
+                        name,
+                        len(values)))
+            result_dict[name] = values
+        return pd.DataFrame(result_dict)
 
     def __init__(
             self,
@@ -131,87 +142,111 @@ class Dataset(Serializable):
             weights=None,
             contigs=None,
             binding_cores=None,
-            extra_rows=[]):
-        self.rows = self._validate_and_normalize(
-                alleles=alleles,
-                peptides=peptides,
-                labels=labels,
-                weights=weights,
-                contigs=contigs,
-                binding_cores=binding_cores)
-        self.rows.extend(extra_rows)
+            extra_columns={}):
+        df = self._validate_and_normalize(
+            alleles=alleles,
+            peptides=peptides,
+            labels=labels,
+            weights=weights,
+            contigs=contigs,
+            binding_cores=binding_cores,
+            extra_columns=extra_columns)
+        self.dataframe = df
+
 
     @classmethod
     def from_rows(cls, rows):
-        return Dataset(extra_rows=rows)
+        return Dataset.from_dataframe(
+            pd.DataFrame.from_records(rows))
+
+    @property
+    def rows(self):
+        return [row for _, row in self.dataframe.iterrows()]
+
+    @property
+    def row_dicts(self):
+        return [row.to_dict() for row in self.rows]
+
+    def map_rows(self, fn, filter_fn=None):
+        if filter_fn is None:
+            new_rows = [fn(row) for row in self.rows]
+        else:
+            new_rows = [fn(row) for row in self.rows if filter_fn(row)]
+        return self.from_rows(new_rows)
 
     @property
     def peptides(self):
-        return [row.peptide for row in self.rows]
+        return list(self.dataframe.peptide)
 
     @property
     def alleles(self):
-        return [row.allele for row in self.rows]
+        return list(self.dataframe.allele)
 
     @property
     def labels(self):
-        return np.array([row.label for row in self.rows])
+        return np.array(self.dataframe.label)
 
     @property
     def weights(self):
-        return np.array([row.weight for row in self.rows])
+        return np.array(self.dataframe.weight)
 
     @property
     def contigs(self):
-        return [row.contig for row in self.rows]
+        return list(self.dataframe.contig)
 
     @property
     def binding_cores(self):
-        return [row.binding_core for row in self.rows]
+        return list(self.dataframe.binding_core)
 
     def __len__(self):
-        return len(self.rows)
+        return len(self.dataframe)
 
     def __eq__(self, other):
         if self.__class__ != other.__class__:
             return False
+
         if len(self) != len(other):
             return False
-        return all([
-            ri == rj
-            for (ri, rj)
-            in zip(self.rows, other.rows)])
+
+        if set(self.dataframe.columns) != set(other.dataframe.columns):
+            return False
+
+        for name in self.dataframe.columns:
+            x = self.dataframe[name]
+            y = other.dataframe[name]
+            x_null = x.isnull()
+            y_null = y.isnull()
+            if (x_null != y_null).any():
+                return False
+            if (x[~x_null] != y[~y_null]).any():
+                return False
+        return True
 
     def __ne__(self, other):
         return not (self == other)
 
     def __str__(self):
-        return "<Dataset with %d elements>\n%s" % (len(self), self.to_dataframe())
+        return "<Dataset with %d elements>\n%s" % (len(self), self.dataframe)
 
     def __repr__(self):
         return str(self)
 
     def __getitem__(self, indices):
         if isinstance(indices, slice):
-            new_rows = self.rows[indices]
+            sub_df = self.dataframe.iloc[indices]
         else:
             index_array = np.array(indices)
             if index_array.dtype == "bool":
                 # replace boolean mask with indices of True entries
                 index_array = np.where(index_array)[0]
-            new_rows = [self.rows[i] for i in index_array]
-
-        return Dataset.from_rows(new_rows)
+            sub_df = self.dataframe.iloc[indices]
+        return Dataset.from_dataframe(sub_df)
 
     @classmethod
     def _check_type(cls, maybe_dataset):
         if maybe_dataset.__class__ is not cls:
             raise TypeError("Expected %s : %s to be %s" % (
                 maybe_dataset, type(maybe_dataset), cls))
-
-    @classmethod
-    def make_empty(cls):
-        return cls.from_rows([])
 
     def split(self, train_idx, test_idx):
         dataset_train = self[train_idx]
@@ -254,23 +289,20 @@ class Dataset(Serializable):
 
     @classmethod
     def concat(cls, datasets):
-        combined = cls.make_empty()
-        for dataset in datasets:
-            combined = combined.combine(dataset)
-        return combined
+        dataframes = [dataset.dataframe for dataset in datasets]
+        return Dataset.from_dataframe(pd.concat(dataframes, ignore_index=True))
 
     def to_dict(self):
-        return OrderedDict([
-            ("peptide", self.peptides),
-            ("allele", self.alleles),
-            ("label", self.labels),
-            ("weight", self.weights),
-            ("contig", self.contigs),
-            ("binding_core", self.binding_cores),
-        ])
+        d = OrderedDict([])
+        for name in self.dataframe.columns:
+            d[name] = list(self.dataframe[name])
+        return d
 
     def to_dataframe(self):
-        return pd.DataFrame(self.to_dict())
+        """
+        Deprecated!
+        """
+        return self.dataframe
 
     @classmethod
     def from_dataframe(cls, df):
@@ -301,6 +333,8 @@ class Dataset(Serializable):
                 labels = np.array(df[name])
                 break
 
+        # TODO: this makes sense is we're just loading a list of hits but
+        # is stranger when dealing with affinity data
         if labels is None:
             labels = np.array([True] * len(peptides))
 
@@ -326,8 +360,8 @@ class Dataset(Serializable):
             peptides=peptides,
             labels=labels,
             weights=weights,
-            binding_cores=binding_cores,
-            contigs=contigs)
+            contigs=contigs,
+            binding_cores=binding_cores)
 
     def to_csv(self, filename):
         self.to_dataframe().to_csv(filename, index=False)
@@ -421,35 +455,44 @@ class Dataset(Serializable):
         for contig, rows in self.group_rows_by_contig_dict().items():
             yield contig, rows
 
-    def group_rows_by_allele_and_label_dict(self):
+    def group_rows_by_allele_and_label_dict(self, label_threshold=None):
         row_groups =  defaultdict(list)
         for row in self.rows:
-            key = (row.allele, row.label)
+            if label_threshold:
+                label = row.label >= label_threshold
+            else:
+                label = row.label
+            key = (row.allele, label)
             row_groups[key].append(row)
         return row_groups
 
-    def group_rows_by_allele_and_label(self):
-        for (key, rows) in self.group_rows_by_allele_and_label_dict().items():
+    def group_rows_by_allele_and_label(self, label_threshold=None):
+        for (key, rows) in self.group_rows_by_allele_and_label_dict(
+                label_threshold=label_threshold).items():
             yield key, rows
 
-    def group_by_allele_and_label_dict(self):
+    def group_by_allele_and_label_dict(self, label_threshold=None):
         return {
             key: Dataset.from_rows(rows)
-            for (key, rows) in self.group_rows_by_allele_and_label()
+            for (key, rows) in self.group_rows_by_allele_and_label(
+                    label_threshold=label_threshold)
         }
 
-    def group_by_allele_and_label(self):
-        for key, dataset in self.group_by_allele_and_label_dict().items():
+    def group_by_allele_and_label(self, label_threshold=None):
+        for key, dataset in self.group_by_allele_and_label_dict(
+                label_threshold=label_threshold).items():
             yield key, dataset
 
-    def group_peptides_by_allele_and_label_dict(self):
+    def group_peptides_by_allele_and_label_dict(self, label_threshold=None):
         return {
             key: [row.peptide for row in rows]
-            for (key, rows) in self.group_rows_by_allele_and_label()
+            for (key, rows) in self.group_rows_by_allele_and_label(
+                    label_threshold=label_threshold)
         }
 
-    def group_peptides_by_allele_and_label(self):
-        for key, peptides in self.group_peptides_by_allele_and_label_dict().items():
+    def group_peptides_by_allele_and_label(self, label_threshold=None):
+        for key, peptides in self.group_peptides_by_allele_and_label_dict(
+                label_threshold=label_threshold).items():
             yield key, peptides
 
     def allele_and_contig_pairs_to_unique_ids(self):
@@ -470,17 +513,27 @@ class Dataset(Serializable):
             in zip(self.alleles, self.contigs)
         ]
 
-    def assemble_contigs(self):
+    def assemble_contigs(
+            self,
+            search_for_binding_cores=True,
+            min_overlap_size=5):
         """
         Ignoring group contigs and use overlap assembly to construct
         longer sequences containing peptides for each allele.
         """
         datasets = []
         for (allele, label), peptides in self.group_peptides_by_allele_and_label():
-            sequence_groups = assemble_into_sequence_groups(peptides)
+            print(" -- Group allele=%s, label=%s" % (allele, label))
+            sequence_groups = assemble_into_sequence_groups(
+                peptides,
+                search_for_binding_cores=search_for_binding_cores,
+                min_overlap_size=min_overlap_size)
             datasets.append(Dataset.from_sequence_groups(
-                sequence_groups, allele=allele, label=label))
-        return Dataset.concat(datasets)
+                sequence_groups,
+                allele=allele,
+                label=label))
+        result = Dataset.concat(datasets)
+        return result
 
     @classmethod
     def from_sequence_groups(
@@ -496,23 +549,45 @@ class Dataset(Serializable):
         def sort_by_increasing_len(s):
             return len(s)
 
+        peptide_counts = Counter()
+        for group in sequence_groups:
+            for peptide in group.children:
+                peptide_counts[peptide] += 1
+
         for group in sequence_groups:
             binding_cores = group.binding_cores
             if len(binding_cores) > 1:
                 binding_cores = sorted(binding_cores, key=sort_by_increasing_len)
-            for c in sorted(group.children, key=lambda x: (len(x), x)):
+            sorted_peptides = sorted(group.children, key=lambda x: (len(x), x))
+            group_size = len(group.children)
+            for peptide in sorted_peptides:
                 binding_core = None
                 for seq in group.binding_cores:
-                    if seq in c:
+                    if seq in peptide:
                         binding_core = seq
                         break
-                row = DatasetRow(
+                # TODO: figure out a weight for each peptide
+                # that makes each group have weights that sum to 1
+                # but also gives lesser weight to peptides
+                # that appear across multiple groups.
+                #
+                # Unclear if it's possible to make arbitary
+                # weight matrices doubly-stochastic
+                #
+                # For now erring on the side of having the groups sum to less
+                # than 1 and groups get more or less weight depending on
+                # how distinctive their peptides are.
+
+                peptide_count = peptide_counts[peptide]
+                row = OrderedDict(
                     allele=allele,
-                    peptide=c,
+                    peptide=peptide,
                     contig=group.contig,
                     binding_core=binding_core,
                     label=True,
-                    weight=1.0 / len(group.children))
+                    weight=1.0 / (peptide_count * group_size),
+                    n_groups_containing_peptide=peptide_count,
+                    n_peptides_in_group=group_size,)
                 rows.append(row)
         return cls.from_rows(rows)
 

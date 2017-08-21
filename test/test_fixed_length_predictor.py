@@ -28,7 +28,12 @@ def test_fixed_length_predictor():
         "FFSAIAMMMLMQQY",
         "FFFSAIAMMMLM"
     ]
-    hits = SIINFEKLF_hits + SQIQQQQLQ_hits + SAIAMMMLM_hits
+    SQIAMMRLR_hits = ["SQIAMMRLR", "F" * 5 + "SQIAMMRLR"]
+    SMIMMMQLQ_hits = ["SMIMMMQLQ", "SMIMMMQLQ" + 7 * "A"]
+    SFIFFFILI_hits = ["SFIFFFILI", "Q" * 3 + "SFIFFFILI"]
+    hits = (
+        SIINFEKLF_hits + SQIQQQQLQ_hits + SAIAMMMLM_hits + SQIAMMRLR_hits +
+        SMIMMMQLQ_hits + SFIFFFILI_hits)
     predictor = FixedLengthPredictor()
     y = predictor.fit_predict_peptides(hits)
     assert np.all(y > 0.5)

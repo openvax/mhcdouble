@@ -143,7 +143,6 @@ class BindingCorePredictor(object):
             weights=binding_core_training_weights,
             contigs=binding_core_training_contigs)
 
-
     def _find_binding_cores(self, candidate_dict):
         """
         Parameters

@@ -107,28 +107,43 @@ def assemble_overlapping_sequences(sequences):
         new_candidate_set.add(combined)
     return new_candidate_set
 
-def add_sequences_not_contained(new_sequences, previous_sequences):
+def add_sequences_not_contained(contigs, original_peptides):
     """
     If any of the previous iteration's sequences aren't contained in
     assembled "new" sequences, then add them to the result set.
     """
-    combined_sequences = set(new_sequences)
-    for s in previous_sequences:
+    contigs_with_unassigned_peptides = set(contigs)
+    for p in original_peptides:
         found_containing_seq = False
-        for t in new_sequences:
-            if s in t:
+        for c in contigs_with_unassigned_peptides:
+            if p in c:
                 found_containing_seq = True
                 break
         if not found_containing_seq:
-            combined_sequences.add(s)
-    return combined_sequences
+            contigs_with_unassigned_peptides.add(p)
+    return contigs_with_unassigned_peptides
 
 def assemble_sequences(sequences, min_overlap_size=MIN_ASSEMBLY_OVERLAP_SIZE):
     """
     Given a collection of sequences, construct a smaller set of sequences which
     contain all of the inputs by overlap assembly.
     """
-    candidate_set = set(sequences)
+    # pruning initial set of sequences to just be the longest peptides
+    # not contained by any other peptides
+    peptides_longest_first = sorted(
+            sequences,
+            reverse=True,
+            key=lambda x: len(x))
+    # keep only peptides which aren't contained in other peptides
+    # for initial candidate set
+    candidate_set = add_sequences_not_contained(
+        contigs=[],
+        original_peptides=peptides_longest_first)
+
+    print("[Assembly] Reduced %d sequences to %d initial contigs" % (
+        len(peptides_longest_first),
+        len(candidate_set)))
+
     iteration = 1
     while iteration < 100:
         print("[Assembly] Iteration %d: # candidates = %d" % (
@@ -140,17 +155,24 @@ def assemble_sequences(sequences, min_overlap_size=MIN_ASSEMBLY_OVERLAP_SIZE):
                 sequences=candidate_set,
                 child_dict=child_dict,
                 parent_dict=parent_dict)
-        new_candidate_set = assemble_overlapping_sequences(root_sequences)
+        new_contigs = assemble_overlapping_sequences(root_sequences)
+
         new_candidate_set = add_sequences_not_contained(
-            new_sequences=new_candidate_set,
-            previous_sequences=root_sequences)
-        if candidate_set == new_candidate_set:
+            contigs=new_contigs,
+            original_peptides=candidate_set)
+        if len(candidate_set) == len(new_candidate_set):
             break
         else:
             iteration += 1
             candidate_set = new_candidate_set
+
     if iteration >= 100:
         print("Assembly failed to converge!")
+
+    assert len(add_sequences_not_contained(
+            contigs=candidate_set,
+            original_peptides=sequences)) == len(candidate_set), \
+        "Some peptides not contained in contigs!"
     return candidate_set
 
 def intersect_sequences(sequences, min_overlap_size=MIN_BINDING_CORE_SIZE):
@@ -205,7 +227,8 @@ def binding_cores_from_leaf_sequences(
 def assemble_into_sequence_groups(
         sequences,
         min_overlap_size=MIN_ASSEMBLY_OVERLAP_SIZE,
-        min_binding_core_size=MIN_BINDING_CORE_SIZE):
+        min_binding_core_size=MIN_BINDING_CORE_SIZE,
+        search_for_binding_cores=True):
     original_sequence_set = set(sequences)
     assembled_sequences = assemble_sequences(
         original_sequence_set,
@@ -215,7 +238,6 @@ def assemble_into_sequence_groups(
         contigs=assembled_sequences.union(original_sequence_set))
     groups = []
     for s in assembled_sequences:
-
         children = list(child_dict.get(s, []))
         if s in original_sequence_set:
             children.append(s)
@@ -223,7 +245,10 @@ def assemble_into_sequence_groups(
         for c in children:
             if c not in child_dict:
                 leaves.add(c)
-        binding_cores = binding_cores_from_leaf_sequences(leaves)
+        if search_for_binding_cores:
+            binding_cores = binding_cores_from_leaf_sequences(leaves)
+        else:
+            binding_cores = leaves
         group = SequenceGroup(
             contig=s,
             children=sorted(children, key=lambda x: (len(x), s)),

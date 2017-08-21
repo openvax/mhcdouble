@@ -65,5 +65,5 @@ def test_dataset_shuffle():
         alleles=["HLA-A0201"] * 20 + ["H-2-Kd"] * 20,
         peptides=["A" * 9] * 40)
     shuffled = dataset.shuffle()
-    eq_(set(shuffled.alleles[:20]), {"HLA-A0201", "H-2-Kd"})
+    eq_(set(shuffled.alleles[:20]), {"HLA-A*02:01", "H-2-Kd"})
 
